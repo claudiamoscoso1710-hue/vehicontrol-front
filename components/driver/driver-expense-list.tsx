@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, Loader2, X } from "lucide-react";
-import { postBackendForm } from "@/lib/api/client-backend";
+import { driverUpdateExpense } from "@/lib/actions/expenses";
 import { DriverExpenseRow } from "@/components/driver/driver-expense-row";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -154,10 +154,7 @@ function DriverEditExpenseForm({
         }
       }
 
-      const result = await postBackendForm(
-        "/api/actions/expenses/update-driver",
-        formData
-      );
+      const result = await driverUpdateExpense(formData);
 
       if (!result.success) {
         setError(result.error);

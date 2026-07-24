@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { postBackendForm } from "@/lib/api/client-backend";
+import {
+  submitDriverExpense,
+  submitDriverVehicleExpense,
+} from "@/lib/actions/expenses";
 import {
   compressImageFile,
   formatFileSize,
@@ -110,8 +113,8 @@ export function DriverExpenseForm({
       }
 
       const result = isVehicleMode
-        ? await postBackendForm("/api/actions/expenses/submit-vehicle", formData)
-        : await postBackendForm("/api/actions/expenses/submit-driver", formData);
+        ? await submitDriverVehicleExpense(formData)
+        : await submitDriverExpense(formData);
 
       if (!result.success) {
         setError(result.error || "No se pudo registrar el gasto.");
