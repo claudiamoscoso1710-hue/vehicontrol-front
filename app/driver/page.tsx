@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Route } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { DriverExpenseReportSheet } from "@/components/driver/driver-expense-report-sheet";
@@ -5,8 +6,10 @@ import { DriverRegisterTripForm } from "@/components/driver/driver-register-trip
 import { DriverFinishTripButton } from "@/components/driver/driver-finish-trip-button";
 import { DriverEditTripForm } from "@/components/driver/driver-edit-trip-form";
 import { DriverExpenseList } from "@/components/driver/driver-expense-list";
-import { DriverBalanceCard } from "@/components/driver/driver-balance-card";
-import { loadDriverAccountStatement } from "@/lib/reports/load-driver-account-statement";
+import {
+  DriverBalanceSection,
+  DriverBalanceSectionFallback,
+} from "@/components/driver/driver-balance-section";
 import { formatCurrency } from "@/lib/format";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -108,7 +111,7 @@ export default async function DriverPage() {
     )
     .reduce((sum, row) => sum + Number(row.amount), 0);
 
-  const [{ data: categories }, { data: assignedVehicle }, { data: clients }, accountStatement] =
+  const [{ data: categories }, { data: assignedVehicle }, { data: clients }] =
     orgId
     ? await Promise.all([
         supabase
@@ -128,9 +131,8 @@ export default async function DriverPage() {
           .select("id, name")
           .eq("organization_id", orgId)
           .order("name"),
-        loadDriverAccountStatement(supabase, orgId, driverProfile!.id),
       ])
-    : [{ data: null }, { data: null }, { data: null }, null];
+    : [{ data: null }, { data: null }, { data: null }];
 
   const orgData = driverProfile?.organizations;
   const org = Array.isArray(orgData) ? orgData[0] : orgData;
@@ -152,11 +154,13 @@ export default async function DriverPage() {
         }
       />
 
-      {driverProfile && orgId && accountStatement ? (
-        <DriverBalanceCard
-          netBalance={accountStatement.netBalance}
-          hasPendingItems={accountStatement.hasPendingItems}
-        />
+      {driverProfile && orgId ? (
+        <Suspense fallback={<DriverBalanceSectionFallback />}>
+          <DriverBalanceSection
+            organizationId={orgId}
+            driverId={driverProfile.id}
+          />
+        </Suspense>
       ) : null}
 
       {driverProfile && orgId ? (

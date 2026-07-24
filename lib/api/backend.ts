@@ -15,6 +15,15 @@ function getBackendUrl() {
 async function getAccessToken() {
   const supabase = await createClient();
   const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    throw new Error("Sesión expirada. Vuelve a iniciar sesión.");
+  }
+
+  const {
     data: { session },
   } = await supabase.auth.getSession();
 
@@ -23,6 +32,21 @@ async function getAccessToken() {
   }
 
   return session.access_token;
+}
+
+async function parseBackendResponse<T>(response: Response): Promise<T> {
+  let data: T;
+  try {
+    data = (await response.json()) as T;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "Respuesta inválida del servidor."
+        : `Error del servidor (${response.status}). Verifica BACKEND_URL en Netlify.`
+    );
+  }
+
+  return data;
 }
 
 export async function callBackendJson<T>(
@@ -40,7 +64,7 @@ export async function callBackendJson<T>(
     cache: "no-store",
   });
 
-  return response.json() as Promise<T>;
+  return parseBackendResponse<T>(response);
 }
 
 export async function callBackendForm<T>(
@@ -49,21 +73,10 @@ export async function callBackendForm<T>(
   formData: FormData
 ): Promise<T> {
   const token = await getAccessToken();
-  const contentType = formData.get("evidence") instanceof File
-    ? undefined
-    : "application/json";
-
-  if (contentType === "application/json") {
-    const fields: Record<string, FormDataEntryValue> = {};
-    formData.forEach((value, key) => {
-      fields[key] = value;
-    });
-
-    return callBackendJson<T>(path, { organizationId, fields });
-  }
-
   const payload = new FormData();
-  payload.set("organizationId", organizationId);
+  if (organizationId) {
+    payload.set("organizationId", organizationId);
+  }
   formData.forEach((value, key) => {
     payload.set(key, value);
   });
@@ -77,7 +90,7 @@ export async function callBackendForm<T>(
     cache: "no-store",
   });
 
-  return response.json() as Promise<T>;
+  return parseBackendResponse<T>(response);
 }
 
 export async function getBackendEvidenceUrl(expenseId: string) {

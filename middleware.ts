@@ -49,7 +49,20 @@ export async function middleware(request: NextRequest) {
     .eq("status", "active");
 
   const roles = (memberships ?? []).map((m) => m.role as MemberRole);
-  const primaryRole = getHighestPriorityRole(roles);
+  let primaryRole = getHighestPriorityRole(roles);
+
+  if (!primaryRole) {
+    const { data: driverProfile } = await supabase
+      .from("drivers")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (driverProfile) {
+      primaryRole = "driver";
+    }
+  }
 
   if (isPublicPath) {
     if (primaryRole) {
