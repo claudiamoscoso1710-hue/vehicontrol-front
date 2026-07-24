@@ -114,7 +114,7 @@ export function DriverExpenseForm({
         : await postBackendForm("/api/actions/expenses/submit-driver", formData);
 
       if (!result.success) {
-        setError(result.error);
+        setError(result.error || "No se pudo registrar el gasto.");
         setLoading(false);
         return;
       }
