@@ -2,7 +2,13 @@
 
 import { CalendarRange, History } from "lucide-react";
 import { ExpenseReviewList } from "@/components/owner/expense-review-list";
+import { OwnerManageExpenseList } from "@/components/owner/owner-manage-expense-list";
 import { DriverExpenseRow } from "@/components/driver/driver-expense-row";
+import {
+  getExpenseDisplayTitle,
+  resolveExpenseScope,
+} from "@/lib/expenses/expense-scope";
+import { getOthersExpenseDetail } from "@/lib/expenses/category-utils";
 import { formatCurrency } from "@/lib/format";
 import type { ExpensePeriodGroup } from "@/lib/reports/load-expenses-by-period";
 
@@ -11,6 +17,10 @@ type Props = {
   variant?: "owner" | "driver";
   emptyCurrentMessage?: string;
   emptyHistoryMessage?: string;
+  canManageExpenses?: boolean;
+  organizationId?: string;
+  tripCategories?: { id: string; name: string }[];
+  vehicleCategories?: { id: string; name: string }[];
 };
 
 export function ExpensePeriodGroups({
@@ -18,6 +28,10 @@ export function ExpensePeriodGroups({
   variant = "owner",
   emptyCurrentMessage = "No hay gastos en el período vigente.",
   emptyHistoryMessage = "Aún no hay gastos en períodos liquidados.",
+  canManageExpenses = false,
+  organizationId,
+  tripCategories = [],
+  vehicleCategories = [],
 }: Props) {
   const currentGroup = groups.find((group) => group.isCurrent);
   const historyGroups = groups.filter((group) => !group.isCurrent);
@@ -55,10 +69,19 @@ export function ExpensePeriodGroups({
 
         {currentGroup && currentGroup.expenses.length > 0 ? (
           variant === "owner" ? (
-            <ExpenseReviewList
-              expenses={currentGroup.expenses.map(toOwnerExpense)}
-              showSettlementStatus={false}
-            />
+            canManageExpenses && organizationId ? (
+              <OwnerManageExpenseList
+                organizationId={organizationId}
+                categories={[...tripCategories, ...vehicleCategories]}
+                expenses={currentGroup.expenses.map(toOwnerExpense)}
+                showSettlementStatus={false}
+              />
+            ) : (
+              <ExpenseReviewList
+                expenses={currentGroup.expenses.map(toOwnerExpense)}
+                showSettlementStatus={false}
+              />
+            )
           ) : (
             <DriverExpensePeriodList expenses={currentGroup.expenses} />
           )
@@ -120,6 +143,9 @@ function toOwnerExpense(expense: ExpensePeriodGroup["expenses"][number]) {
     amount: expense.amount,
     status: expense.status,
     notes: expense.notes,
+    owner_prepaid: expense.owner_prepaid,
+    additional_trip_expense: expense.additional_trip_expense,
+    category_id: expense.category_id,
     created_at: expense.created_at,
     trip_id: expense.trip_id,
     settlement_id: expense.settlement_id,
@@ -143,18 +169,41 @@ function DriverExpensePeriodList({
   return (
     <ul className="space-y-2">
       {expenses.map((expense) => {
-        const scopeLabel = expense.trip_id
-          ? expense.tripLabel ?? "Gasto de viaje"
-          : `Gasto del vehículo${expense.vehiclePlate ? ` · ${expense.vehiclePlate}` : ""}`;
+        const scope = resolveExpenseScope({
+          tripId: expense.trip_id,
+          additionalTripExpense: expense.additional_trip_expense,
+        });
+        const displayTitle = getExpenseDisplayTitle({
+          scope,
+          categoryName: expense.categoryName,
+          notes: expense.notes,
+        });
+        const scopeLabel =
+          scope === "vehicle"
+            ? `Gasto del vehículo${expense.vehiclePlate ? ` · ${expense.vehiclePlate}` : ""}`
+            : expense.tripLabel ?? "Gasto de viaje";
+        const categoryDetail =
+          scope === "additional"
+            ? null
+            : getOthersExpenseDetail(expense.categoryName, expense.notes);
+        const subtitleParts = [scopeLabel];
+        if (expense.notes && scope !== "additional" && !categoryDetail) {
+          subtitleParts.push(expense.notes);
+        }
 
         return (
           <li key={expense.id}>
             <DriverExpenseRow
               expenseId={expense.id}
-              categoryName={expense.categoryName}
+              categoryName={displayTitle}
+              categoryDetail={categoryDetail}
               amount={expense.amount}
               dateLabel={new Date(expense.created_at).toLocaleDateString("es-CO")}
-              subtitle={`${scopeLabel}${expense.notes ? ` · ${expense.notes}` : ""}`}
+              subtitle={subtitleParts.join(" · ")}
+              ownerPrepaid={expense.owner_prepaid}
+              expenseScope={scope}
+              tripId={expense.trip_id}
+              additionalTripExpense={expense.additional_trip_expense}
               hasEvidence={expense.hasEvidence}
             />
           </li>

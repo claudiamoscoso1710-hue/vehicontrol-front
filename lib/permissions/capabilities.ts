@@ -6,6 +6,7 @@ export type OrgCapabilities = {
   canViewExpenses: boolean;
   canManageTeam: boolean;
   canManageCategories: boolean;
+  canManageExpenses: boolean;
   canViewCommercial: boolean;
 };
 
@@ -19,6 +20,7 @@ const CAPABILITIES: Record<
     canViewExpenses: true,
     canManageTeam: true,
     canManageCategories: true,
+    canManageExpenses: true,
     canViewCommercial: true,
   },
   admin: {
@@ -27,6 +29,7 @@ const CAPABILITIES: Record<
     canViewExpenses: true,
     canManageTeam: false,
     canManageCategories: false,
+    canManageExpenses: true,
     canViewCommercial: false,
   },
   accountant: {
@@ -35,6 +38,7 @@ const CAPABILITIES: Record<
     canViewExpenses: true,
     canManageTeam: false,
     canManageCategories: true,
+    canManageExpenses: false,
     canViewCommercial: false,
   },
 };

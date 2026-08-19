@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { CURRENT_PERIOD_ID } from "@/lib/reports/settlement-period";
 
 export type VehicleProfitability = {
@@ -13,7 +14,7 @@ export type VehicleProfitability = {
   margin: number;
 };
 
-export async function getVehicleProfitability(
+export const getVehicleProfitability = cache(async function getVehicleProfitability(
   supabase: SupabaseClient,
   organizationId: string,
   options?: { since?: Date; until?: Date; periodId?: string }
@@ -148,4 +149,4 @@ export async function getVehicleProfitability(
       };
     })
     .sort((a, b) => b.margin - a.margin);
-}
+});

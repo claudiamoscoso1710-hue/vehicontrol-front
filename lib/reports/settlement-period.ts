@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { formatSettlementPeriod } from "@/lib/reports/driver-account-statement";
 
 export type SettlementPeriodOption = {
@@ -64,7 +65,8 @@ function maxDate(dates: (string | null | undefined)[]): string | null {
   return new Date(Math.max(...values)).toISOString();
 }
 
-export async function loadDriverSettlementPeriods(
+export const loadDriverSettlementPeriods = cache(
+  async function loadDriverSettlementPeriods(
   supabase: SupabaseClient,
   organizationId: string,
   driverId: string
@@ -144,7 +146,7 @@ export async function loadDriverSettlementPeriods(
   };
 
   return [currentOption, ...closedOptions];
-}
+});
 
 export async function resolveDriverPeriodContext(
   supabase: SupabaseClient,

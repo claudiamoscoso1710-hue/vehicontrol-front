@@ -44,6 +44,12 @@ export function CreateOrganizationForm() {
           placeholder="Email del propietario (opcional)"
           className="rounded-md border px-3 py-2 text-sm"
         />
+        <input
+          name="ownerPassword"
+          type="text"
+          placeholder="Contraseña del propietario (si es nuevo)"
+          className="rounded-md border px-3 py-2 text-sm sm:col-span-2"
+        />
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button type="submit" disabled={loading}>

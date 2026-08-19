@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { formatSettlementPeriod } from "@/lib/reports/driver-account-statement";
 import {
   CURRENT_PERIOD_ID,
@@ -11,6 +12,10 @@ export type ExpensePeriodListItem = {
   amount: number;
   status: string;
   notes: string | null;
+  owner_prepaid: boolean;
+  additional_trip_expense: boolean;
+  category_id: string | null;
+  vehicle_id: string | null;
   created_at: string;
   trip_id: string | null;
   settlement_id: string | null;
@@ -35,6 +40,10 @@ type RawExpense = {
   amount: number;
   status: string;
   notes: string | null;
+  owner_prepaid?: boolean | null;
+  additional_trip_expense?: boolean | null;
+  category_id?: string | null;
+  vehicle_id?: string | null;
   created_at: string;
   trip_id: string | null;
   settlement_id: string | null;
@@ -67,6 +76,10 @@ function mapExpenseRow(
     amount: Number(expense.amount),
     status: expense.status,
     notes: expense.notes,
+    owner_prepaid: Boolean(expense.owner_prepaid),
+    additional_trip_expense: Boolean(expense.additional_trip_expense),
+    category_id: expense.category_id ?? null,
+    vehicle_id: expense.vehicle_id ?? null,
     created_at: expense.created_at,
     trip_id: expense.trip_id,
     settlement_id: expense.settlement_id,
@@ -136,7 +149,8 @@ function buildGroups(
   return groups;
 }
 
-export async function loadOrganizationExpensesByPeriod(
+export const loadOrganizationExpensesByPeriod = cache(
+  async function loadOrganizationExpensesByPeriod(
   supabase: SupabaseClient,
   organizationId: string
 ): Promise<ExpensePeriodGroup[]> {
@@ -144,7 +158,7 @@ export async function loadOrganizationExpensesByPeriod(
     supabase
       .from("expenses")
       .select(
-        "id, amount, status, notes, created_at, trip_id, settlement_id, expense_categories(name), drivers(full_name), trips(origin, destination), vehicles(plate)"
+        "id, amount, status, notes, owner_prepaid, additional_trip_expense, category_id, vehicle_id, created_at, trip_id, settlement_id, expense_categories(name), drivers(full_name), trips(origin, destination), vehicles(plate)"
       )
       .eq("organization_id", organizationId)
       .eq("status", "approved")
@@ -185,9 +199,10 @@ export async function loadOrganizationExpensesByPeriod(
     "Pendientes de liquidar · cada conductor tiene su propio período (no es mes calendario)";
 
   return buildGroups(expenses, settlementRows, currentRangeLabel);
-}
+});
 
-export async function loadDriverExpensesByPeriod(
+export const loadDriverExpensesByPeriod = cache(
+  async function loadDriverExpensesByPeriod(
   supabase: SupabaseClient,
   organizationId: string,
   driverId: string,
@@ -204,7 +219,7 @@ export async function loadDriverExpensesByPeriod(
   let expensesQuery = supabase
     .from("expenses")
     .select(
-      "id, amount, status, notes, created_at, trip_id, settlement_id, expense_categories(name), drivers(full_name), trips(origin, destination), vehicles(plate)"
+      "id, amount, status, notes, owner_prepaid, additional_trip_expense, category_id, created_at, trip_id, settlement_id, expense_categories(name), drivers(full_name), trips(origin, destination), vehicles(plate)"
     )
     .eq("organization_id", organizationId)
     .eq("driver_id", driverId)
@@ -255,7 +270,7 @@ export async function loadDriverExpensesByPeriod(
     })),
     currentRangeLabel
   );
-}
+});
 
 export function getCurrentExpensePeriodGroup(
   groups: ExpensePeriodGroup[]

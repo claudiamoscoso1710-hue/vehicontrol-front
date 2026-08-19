@@ -2,12 +2,20 @@
 
 import { DriverExpenseRow } from "@/components/driver/driver-expense-row";
 import { formatCurrency } from "@/lib/format";
+import {
+  getAdditionalExpenseDescription,
+  getExpenseDisplayTitle,
+  resolveExpenseScope,
+} from "@/lib/expenses/expense-scope";
+import { getOthersExpenseDetail } from "@/lib/expenses/category-utils";
 
 type Expense = {
   id: string;
   amount: number;
   status: string;
   notes: string | null;
+  owner_prepaid?: boolean;
+  additional_trip_expense?: boolean;
   created_at: string;
   trip_id?: string | null;
   settlement_id?: string | null;
@@ -42,10 +50,19 @@ export function ExpenseReviewList({
         const driver = Array.isArray(expense.drivers)
           ? expense.drivers[0]
           : expense.drivers;
-        const isVehicleExpense = !expense.trip_id;
-        const scopeLabel = isVehicleExpense
-          ? `Gasto del vehículo${expense.vehiclePlate ? ` · ${expense.vehiclePlate}` : ""}`
-          : expense.tripLabel ?? "Gasto de viaje";
+        const scope = resolveExpenseScope({
+          tripId: expense.trip_id,
+          additionalTripExpense: expense.additional_trip_expense,
+        });
+        const displayTitle = getExpenseDisplayTitle({
+          scope,
+          categoryName: category?.name,
+          notes: expense.notes,
+        });
+        const scopeLabel =
+          scope === "vehicle"
+            ? `Gasto del vehículo${expense.vehiclePlate ? ` · ${expense.vehiclePlate}` : ""}`
+            : expense.tripLabel ?? "Gasto de viaje";
         const settlementLabel = expense.settlement_id
           ? "Liquidado"
           : "Pendiente de liquidar";
@@ -55,11 +72,19 @@ export function ExpenseReviewList({
           <li key={expense.id}>
             <DriverExpenseRow
               expenseId={expense.id}
-              categoryName={category?.name ?? "Sin categoría"}
+              categoryName={displayTitle}
+              categoryDetail={
+                scope === "additional"
+                  ? null
+                  : getOthersExpenseDetail(category?.name ?? "", expense.notes)
+              }
               amount={Number(expense.amount)}
               dateLabel={new Date(expense.created_at).toLocaleDateString("es-CO")}
+              ownerPrepaid={Boolean(expense.owner_prepaid)}
+              expenseScope={scope}
+              tripId={expense.trip_id}
               subtitle={`${driver?.full_name ?? "Conductor"} · ${scopeLabel}${statusSuffix}${
-                expense.notes ? ` · ${expense.notes}` : ""
+                expense.notes && scope !== "additional" ? ` · ${expense.notes}` : ""
               }`}
               hasEvidence={expense.hasEvidence}
             />

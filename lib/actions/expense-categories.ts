@@ -1,6 +1,7 @@
 "use server";
 
 import { callBackendForm, callBackendJson } from "@/lib/api/backend";
+import type { ExpenseCategoryScope } from "@/lib/expenses/expense-scope";
 
 export type CategoryActionResult =
   | { success: true }
@@ -17,6 +18,19 @@ export async function createExpenseCategory(
   );
 }
 
+export async function updateExpenseCategory(
+  organizationId: string,
+  categoryId: string,
+  formData: FormData
+): Promise<CategoryActionResult> {
+  formData.set("categoryId", categoryId);
+  return callBackendForm(
+    "/api/actions/expense-categories/update",
+    organizationId,
+    formData
+  );
+}
+
 export async function deleteExpenseCategory(
   organizationId: string,
   categoryId: string
@@ -26,3 +40,10 @@ export async function deleteExpenseCategory(
     categoryId,
   });
 }
+
+export type ExpenseCategoryRow = {
+  id: string;
+  name: string;
+  requires_evidence: boolean;
+  scope: ExpenseCategoryScope;
+};

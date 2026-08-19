@@ -2,26 +2,47 @@
 
 import { useState } from "react";
 import { Eye, ExternalLink, Loader2, Pencil, X } from "lucide-react";
+import { ExpenseScopeBadge } from "@/components/shared/expense-scope-badge";
 import { formatCurrency } from "@/lib/format";
+import {
+  resolveExpenseScope,
+  type ExpenseScope,
+} from "@/lib/expenses/expense-scope";
 import { cn } from "@/lib/utils";
 
 type Props = {
   expenseId: string;
   categoryName: string;
+  categoryDetail?: string | null;
   amount: number;
   dateLabel: string;
   subtitle?: string | null;
+  ownerPrepaid?: boolean;
+  expenseScope?: ExpenseScope;
+  additionalTripExpense?: boolean;
+  tripId?: string | null;
   hasEvidence?: boolean;
   onEdit?: () => void;
   className?: string;
 };
 
+const amountToneClass: Record<ExpenseScope, string> = {
+  trip: "text-sky-700",
+  vehicle: "text-violet-700",
+  additional: "text-amber-800",
+};
+
 export function DriverExpenseRow({
   expenseId,
   categoryName,
+  categoryDetail,
   amount,
   dateLabel,
   subtitle,
+  ownerPrepaid = false,
+  expenseScope,
+  additionalTripExpense = false,
+  tripId = "trip",
   hasEvidence = false,
   onEdit,
   className,
@@ -30,6 +51,13 @@ export function DriverExpenseRow({
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const scope =
+    expenseScope ??
+    resolveExpenseScope({
+      tripId,
+      additionalTripExpense,
+    });
 
   async function toggleEvidence() {
     if (evidenceOpen) {
@@ -72,7 +100,23 @@ export function DriverExpenseRow({
     >
       <div className="flex items-center gap-3 p-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{categoryName}</p>
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <ExpenseScopeBadge scope={scope} />
+            <p className="truncate text-sm font-semibold">
+              {categoryName}
+              {categoryDetail && scope !== "additional" ? (
+                <>
+                  <span className="mx-1 font-normal text-muted-foreground">·</span>
+                  <span>{categoryDetail}</span>
+                </>
+              ) : null}
+            </p>
+            {ownerPrepaid ? (
+              <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                Anticipado
+              </span>
+            ) : null}
+          </div>
           {subtitle ? (
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
               {subtitle}
@@ -81,7 +125,12 @@ export function DriverExpenseRow({
           <p className="mt-0.5 text-xs text-muted-foreground">{dateLabel}</p>
         </div>
 
-        <p className="shrink-0 text-sm font-bold tabular-nums text-blue-700">
+        <p
+          className={cn(
+            "shrink-0 text-sm font-bold tabular-nums",
+            amountToneClass[scope]
+          )}
+        >
           +{formatCurrency(amount)}
         </p>
 

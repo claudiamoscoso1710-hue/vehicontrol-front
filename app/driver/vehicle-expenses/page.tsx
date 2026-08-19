@@ -1,5 +1,5 @@
 import { Car, Receipt } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { getDriverContext } from "@/lib/auth/cached-auth";
 import { DriverExpenseReportSheet } from "@/components/driver/driver-expense-report-sheet";
 import { ExpensePeriodGroups } from "@/components/shared/expense-period-groups";
 import { loadDriverExpensesByPeriod } from "@/lib/reports/load-expenses-by-period";
@@ -8,49 +8,47 @@ import {
   DriverPageContainer,
   DriverPageHeader,
 } from "@/components/driver/driver-ui";
-import { VEHICLE_EXPENSE_CATEGORY_NAMES } from "@/lib/expenses/category-utils";
+import { filterCategoriesByScope } from "@/lib/expenses/expense-scope";
 
 export default async function DriverVehicleExpensesPage() {
-  const supabase = await createClient();
+  const ctx = await getDriverContext();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (!ctx) {
+    return (
+      <DriverPageContainer>
+        <DriverEmptyState
+          icon={Car}
+          title="Perfil no configurado"
+          description="Contacta a tu empresa para vincular tu usuario como conductor."
+        />
+      </DriverPageContainer>
+    );
+  }
 
-  const { data: driverProfile } = await supabase
-    .from("drivers")
-    .select("id, full_name, organization_id")
-    .eq("user_id", user?.id ?? "")
-    .maybeSingle();
-
-  const orgId = driverProfile?.organization_id;
+  const { supabase, driver } = ctx;
+  const orgId = driver.organization_id;
 
   const [{ data: allCategories }, { data: assignedVehicle }, expenseGroups] =
-    orgId && driverProfile
-      ? await Promise.all([
-          supabase
-            .from("expense_categories")
-            .select("id, name")
-            .eq("organization_id", orgId)
-            .order("name"),
-          supabase
-            .from("vehicles")
-            .select("id, plate, brand")
-            .eq("organization_id", orgId)
-            .eq("assigned_driver_id", driverProfile.id)
-            .eq("commercial_status", "active")
-            .maybeSingle(),
-          loadDriverExpensesByPeriod(supabase, orgId, driverProfile.id, {
-            vehicleOnly: true,
-          }),
-        ])
-      : [{ data: null }, { data: null }, []];
+    await Promise.all([
+      supabase
+        .from("expense_categories")
+        .select("id, name, scope")
+        .eq("organization_id", orgId)
+        .eq("scope", "vehicle")
+        .order("name"),
+      supabase
+        .from("vehicles")
+        .select("id, plate, brand")
+        .eq("organization_id", orgId)
+        .eq("assigned_driver_id", driver.id)
+        .eq("commercial_status", "active")
+        .maybeSingle(),
+      loadDriverExpensesByPeriod(supabase, orgId, driver.id, {
+        vehicleOnly: true,
+      }),
+    ]);
 
-  const vehicleCategories = (allCategories ?? []).filter((cat) =>
-    VEHICLE_EXPENSE_CATEGORY_NAMES.some(
-      (name) => name.toLowerCase() === cat.name.toLowerCase()
-    )
-  );
+  const vehicleCategories = filterCategoriesByScope(allCategories ?? [], "vehicle");
 
   return (
     <DriverPageContainer>
@@ -58,21 +56,13 @@ export default async function DriverVehicleExpensesPage() {
         eyebrow="Flota"
         title="Gastos del vehículo"
         subtitle={
-          driverProfile
-            ? assignedVehicle
-              ? `${driverProfile.full_name} · ${assignedVehicle.plate}`
-              : `${driverProfile.full_name} · sin vehículo asignado`
-            : undefined
+          assignedVehicle
+            ? `${driver.full_name} · ${assignedVehicle.plate}`
+            : `${driver.full_name} · sin vehículo asignado`
         }
       />
 
-      {!driverProfile || !orgId ? (
-        <DriverEmptyState
-          icon={Car}
-          title="Perfil no configurado"
-          description="Contacta a tu empresa para vincular tu usuario como conductor."
-        />
-      ) : vehicleCategories.length === 0 ? (
+      {vehicleCategories.length === 0 ? (
         <DriverEmptyState
           icon={Receipt}
           title="Sin categorías de vehículo"

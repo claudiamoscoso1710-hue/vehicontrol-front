@@ -168,18 +168,18 @@ export function DriverAccountSummaryCard({
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1">
                   <Route className="h-3 w-3" />
-                  {statement.tripRows.length} viaje
-                  {statement.tripRows.length === 1 ? "" : "s"}
+                  {statement.tripCount} viaje
+                  {statement.tripCount === 1 ? "" : "s"}
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1">
                   <Wallet className="h-3 w-3" />
-                  {statement.expenseRows.length} gasto
-                  {statement.expenseRows.length === 1 ? "" : "s"}
+                  {statement.expenseCount} gasto
+                  {statement.expenseCount === 1 ? "" : "s"}
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1">
                   <Banknote className="h-3 w-3" />
-                  {statement.advances.length} anticipo
-                  {statement.advances.length === 1 ? "" : "s"}
+                  {statement.advanceCount} anticipo
+                  {statement.advanceCount === 1 ? "" : "s"}
                 </span>
               </div>
             ) : null}

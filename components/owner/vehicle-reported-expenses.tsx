@@ -22,6 +22,8 @@ export type VehicleExpenseItem = {
   expense_categories: { name: string } | { name: string }[] | null;
   drivers: { full_name: string } | { full_name: string }[] | null;
   hasEvidence: boolean;
+  additional_trip_expense?: boolean;
+  owner_prepaid?: boolean;
 };
 
 export type VehicleTripWithExpenses = {

@@ -3,7 +3,7 @@
 
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { NetworkOnly, Serwist } from "serwist";
+import { NetworkFirst, NetworkOnly, Serwist } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -24,6 +24,15 @@ const serwist = new Serwist({
         url.hostname.includes("supabase.co") || url.pathname.startsWith("/api/"),
       handler: new NetworkOnly(),
     },
+    {
+      matcher: ({ request, url }) =>
+        request.destination === "document" &&
+        (url.pathname.startsWith("/driver") || url.pathname === "/~offline"),
+      handler: new NetworkFirst({
+        cacheName: "driver-pages",
+        networkTimeoutSeconds: 4,
+      }),
+    },
     ...defaultCache,
   ],
   fallbacks: {
@@ -34,7 +43,7 @@ const serwist = new Serwist({
           const url = new URL(request.url);
           return (
             request.destination === "document" &&
-            url.pathname.startsWith("/driver")
+            (url.pathname.startsWith("/driver") || url.pathname === "/~offline")
           );
         },
       },

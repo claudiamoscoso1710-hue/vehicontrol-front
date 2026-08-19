@@ -26,3 +26,19 @@ export async function closeTrip(
 ): Promise<TripActionResult> {
   return callBackendJson("/api/actions/trips/close", { organizationId, tripId });
 }
+
+export async function updateTrip(
+  organizationId: string,
+  tripId: string,
+  formData: FormData
+): Promise<TripActionResult> {
+  formData.set("tripId", tripId);
+  return callBackendForm("/api/actions/trips/update", organizationId, formData);
+}
+
+export async function deleteTrip(
+  tripId: string,
+  organizationId: string
+): Promise<TripActionResult> {
+  return callBackendJson("/api/actions/trips/delete", { organizationId, tripId });
+}

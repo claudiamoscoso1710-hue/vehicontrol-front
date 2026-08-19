@@ -4,6 +4,11 @@ import { useState } from "react";
 import { ChevronDown, Route } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { getOthersExpenseDetail } from "@/lib/expenses/category-utils";
+import {
+  getExpenseDisplayTitle,
+  resolveExpenseScope,
+} from "@/lib/expenses/expense-scope";
 import { DriverExpenseRow } from "@/components/driver/driver-expense-row";
 import { ExpensePeriodGroups } from "@/components/shared/expense-period-groups";
 import type { ExpensePeriodGroup } from "@/lib/reports/load-expenses-by-period";
@@ -18,8 +23,10 @@ type TripExpense = {
   id: string;
   amount: number;
   status: string;
+  notes: string | null;
   created_at: string;
   hasEvidence: boolean;
+  additional_trip_expense?: boolean;
   expense_categories: { name: string } | { name: string }[] | null;
 };
 
@@ -164,19 +171,44 @@ export function DriverHistoryTabs({
 
                   {isOpen && hasExpenses ? (
                     <ul className="space-y-2 border-t border-border/50 bg-muted/20 px-4 py-3">
-                      {trip.expenses.map((expense) => (
+                      {trip.expenses.map((expense) => {
+                        const categoryName =
+                          getCategory(expense)?.name ?? "Gasto";
+                        const scope = resolveExpenseScope({
+                          tripId: trip.id,
+                          additionalTripExpense: expense.additional_trip_expense,
+                        });
+                        const displayTitle = getExpenseDisplayTitle({
+                          scope,
+                          categoryName,
+                          notes: expense.notes,
+                        });
+
+                        return (
                         <li key={expense.id}>
                           <DriverExpenseRow
                             expenseId={expense.id}
-                            categoryName={getCategory(expense)?.name ?? "Gasto"}
+                            categoryName={displayTitle}
+                            categoryDetail={
+                              scope === "additional"
+                                ? null
+                                : getOthersExpenseDetail(
+                                    categoryName,
+                                    expense.notes
+                                  )
+                            }
                             amount={Number(expense.amount)}
                             dateLabel={new Date(expense.created_at).toLocaleDateString(
                               "es-CO"
                             )}
+                            expenseScope={scope}
+                            tripId={trip.id}
+                            additionalTripExpense={expense.additional_trip_expense}
                             hasEvidence={expense.hasEvidence}
                           />
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   ) : null}
 

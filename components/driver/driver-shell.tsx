@@ -1,13 +1,22 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, History, Truck, LogOut, Wallet, Car } from "lucide-react";
 import { useTransition } from "react";
 import { signOut } from "@/lib/actions/auth";
+import { NavLink } from "@/components/shared/navigation-provider";
+import { NetworkStatusBanner } from "@/components/driver/network-status-banner";
+import { ReminderBannerStack, ReminderBellButton } from "@/components/driver/reminder-ui";
+import type { VehicleExpenseReminder } from "@/lib/reminders/vehicle-expense-reminders";
 import { cn } from "@/lib/utils";
 
-export function DriverShell({ children }: { children: React.ReactNode }) {
+export function DriverShell({
+  children,
+  reminders = [],
+}: {
+  children: React.ReactNode;
+  reminders?: VehicleExpenseReminder[];
+}) {
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
 
@@ -33,17 +42,22 @@ export function DriverShell({ children }: { children: React.ReactNode }) {
               <p className="text-[11px] text-muted-foreground">Panel conductor</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => startTransition(() => signOut())}
-            disabled={pending}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted active:scale-95 disabled:opacity-50"
-            aria-label="Cerrar sesión"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <ReminderBellButton reminders={reminders} />
+            <button
+              type="button"
+              onClick={() => startTransition(() => signOut())}
+              disabled={pending}
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </header>
+      <ReminderBannerStack reminders={reminders} />
+      <NetworkStatusBanner />
 
       <main className="flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         {children}
@@ -55,14 +69,16 @@ export function DriverShell({ children }: { children: React.ReactNode }) {
             const active = pathname === tab.href;
             const Icon = tab.icon;
             return (
-              <Link
+              <NavLink
                 key={tab.href}
                 href={tab.href}
+                isActive={active}
+                showSpinner={false}
                 className={cn(
-                  "flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-2 text-[10px] font-semibold transition-all active:scale-95",
+                  "flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-2 text-[10px] font-semibold transition-all duration-150 active:scale-95",
                   active
-                    ? "bg-brand/10 text-brand"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-brand/15 text-brand shadow-sm"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 )}
               >
                 <Icon
@@ -72,7 +88,7 @@ export function DriverShell({ children }: { children: React.ReactNode }) {
                   )}
                 />
                 {tab.label}
-              </Link>
+              </NavLink>
             );
           })}
         </div>

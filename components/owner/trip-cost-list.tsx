@@ -2,22 +2,15 @@
 
 import { Wallet } from "lucide-react";
 import { ExpenseReviewList } from "@/components/owner/expense-review-list";
+import {
+  OwnerManageExpenseList,
+  type OwnerManageExpense,
+} from "@/components/owner/owner-manage-expense-list";
 import { formatCurrency } from "@/lib/format";
 
-type Expense = {
-  id: string;
-  amount: number;
-  status: string;
-  notes: string | null;
-  created_at: string;
-  trip_id?: string | null;
-  settlement_id?: string | null;
-  tripLabel?: string | null;
-  vehiclePlate?: string | null;
-  expense_categories: { name: string } | { name: string }[] | null;
-  drivers: { full_name: string } | { full_name: string }[] | null;
-  hasEvidence?: boolean;
-};
+type Category = { id: string; name: string };
+
+type Expense = OwnerManageExpense;
 
 type Props = {
   expenses: Expense[];
@@ -26,6 +19,9 @@ type Props = {
   driverSalary?: number;
   salaryEstimated?: boolean;
   emptyMessage?: string;
+  canManageExpenses?: boolean;
+  organizationId?: string;
+  categories?: Category[];
 };
 
 export function TripCostList({
@@ -35,6 +31,9 @@ export function TripCostList({
   driverSalary = 0,
   salaryEstimated = false,
   emptyMessage = "Sin otros gastos en este viaje.",
+  canManageExpenses = false,
+  organizationId,
+  categories = [],
 }: Props) {
   const hasSalary = driverSalary > 0;
   const hasExpenses = expenses.length > 0;
@@ -66,7 +65,23 @@ export function TripCostList({
       ) : null}
 
       {hasExpenses ? (
-        <ExpenseReviewList expenses={expenses} emptyMessage={emptyMessage} />
+        canManageExpenses && organizationId && categories.length > 0 ? (
+          <OwnerManageExpenseList
+            organizationId={organizationId}
+            categories={categories}
+            expenses={expenses}
+            emptyMessage={emptyMessage}
+            showSettlementStatus={false}
+          />
+        ) : (
+          <ExpenseReviewList
+            expenses={expenses.map((expense) => ({
+              ...expense,
+              status: "approved",
+            }))}
+            emptyMessage={emptyMessage}
+          />
+        )
       ) : null}
     </div>
   );

@@ -38,6 +38,7 @@ export type ExpenseRow = {
   vehicleLabel: string | null;
   scope: "trip" | "vehicle";
   hasEvidence: boolean;
+  additionalTripExpense?: boolean;
 };
 
 export type SettlementHistoryRow = {
@@ -94,6 +95,7 @@ type TripInput = {
 type TripExpenseInput = {
   trip_id: string;
   amount: number;
+  additional_trip_expense?: boolean;
 };
 
 type DriverExpenseInput = {
@@ -107,6 +109,7 @@ type DriverExpenseInput = {
   trip_destination: string | null;
   vehicle_plate: string | null;
   has_evidence: boolean;
+  additional_trip_expense?: boolean;
 };
 
 type AdvanceInput = {
@@ -154,11 +157,21 @@ export function buildDriverAccountStatement(params: {
     params.driverCommissionPercent
   );
 
-  const expensesByTrip = new Map<string, number>();
+  const expensesByTripForSalary = new Map<string, number>();
+  const expensesByTripTotal = new Map<string, number>();
   for (const expense of params.tripExpenses) {
     if (!expense.trip_id) continue;
-    const current = expensesByTrip.get(expense.trip_id) ?? 0;
-    expensesByTrip.set(expense.trip_id, current + Number(expense.amount));
+    const amount = Number(expense.amount);
+    expensesByTripTotal.set(
+      expense.trip_id,
+      (expensesByTripTotal.get(expense.trip_id) ?? 0) + amount
+    );
+    if (!expense.additional_trip_expense) {
+      expensesByTripForSalary.set(
+        expense.trip_id,
+        (expensesByTripForSalary.get(expense.trip_id) ?? 0) + amount
+      );
+    }
   }
 
   const expenseRows: ExpenseRow[] = params.driverExpenses.map((expense) => {
@@ -177,6 +190,7 @@ export function buildDriverAccountStatement(params: {
       vehicleLabel: expense.vehicle_plate,
       scope: expense.trip_id ? "trip" : "vehicle",
       hasEvidence: expense.has_evidence,
+      additionalTripExpense: Boolean(expense.additional_trip_expense),
     };
   });
 
@@ -194,12 +208,13 @@ export function buildDriverAccountStatement(params: {
 
   const tripRows: TripEarningRow[] = params.trips.map((trip) => {
     const freight = Number(trip.freight_value ?? 0);
-    const expenses = expensesByTrip.get(trip.id) ?? 0;
+    const expenses = expensesByTripTotal.get(trip.id) ?? 0;
+    const salaryExpenses = expensesByTripForSalary.get(trip.id) ?? 0;
     const earnings = calculateTripEarnings(
       freight,
-      expenses,
+      salaryExpenses,
       commissionPercent,
-      "before_expenses"
+      params.orgConfig.salary_basis
     );
 
     return {

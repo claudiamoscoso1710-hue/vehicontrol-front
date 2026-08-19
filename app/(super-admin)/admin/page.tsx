@@ -47,7 +47,7 @@ export default async function SuperAdminPage() {
           { label: "Organizaciones activas", value: String(orgCount ?? 0) },
           { label: "Vehículos activos", value: String(activeVehicles ?? 0) },
           { label: "Solicitudes pendientes", value: String(pendingVehicles ?? 0) },
-          { label: "MRR estimado", value: formatCurrency(mrr) },
+          { label: "MRR (camiones × tarifa)", value: formatCurrency(mrr) },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-lg border p-4">
             <p className="text-xs text-muted-foreground">{kpi.label}</p>

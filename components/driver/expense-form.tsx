@@ -15,11 +15,16 @@ import {
   submitDriverExpense,
   submitDriverVehicleExpense,
 } from "@/lib/actions/expenses";
+import { parseMoneyValue } from "@/lib/format";
+import { isLikelyNetworkError } from "@/lib/offline/use-network-status";
+import { queueDriverExpense } from "@/lib/offline/sync";
 import {
   compressImageFile,
   formatFileSize,
 } from "@/lib/client/compress-image";
 import { isOthersCategory } from "@/lib/expenses/category-utils";
+import { appendReminderFieldsToFormData, readReminderQueueFields } from "@/lib/reminders/parse-reminder-form";
+import { VehicleReminderFormFields } from "@/components/driver/vehicle-reminder-form-fields";
 import {
   driverFieldClassName,
   driverTextareaClassName,
@@ -37,6 +42,7 @@ type Props = {
   categories: Category[];
   tripId?: string;
   vehicleMode?: boolean;
+  additionalTripExpense?: boolean;
   assignedVehicle?: AssignedVehicle | null;
   submitLabel?: string;
   compact?: boolean;
@@ -48,6 +54,7 @@ export function DriverExpenseForm({
   categories,
   tripId,
   vehicleMode = false,
+  additionalTripExpense = false,
   assignedVehicle = null,
   submitLabel,
   compact = false,
@@ -64,6 +71,7 @@ export function DriverExpenseForm({
   const [previewName, setPreviewName] = useState<string | null>(null);
   const [amountKey, setAmountKey] = useState(0);
   const [categoryId, setCategoryId] = useState("");
+  const [ownerPrepaid, setOwnerPrepaid] = useState(false);
 
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const showOthersField = selectedCategory
@@ -85,6 +93,7 @@ export function DriverExpenseForm({
 
     try {
       const formData = new FormData();
+      const clientMutationId = crypto.randomUUID();
       formData.set("organizationId", organizationId);
       formData.set("categoryId", String(rawFormData.get("categoryId") ?? ""));
       formData.set("amount", String(rawFormData.get("amount") ?? ""));
@@ -93,7 +102,18 @@ export function DriverExpenseForm({
         "customDescription",
         String(rawFormData.get("customDescription") ?? "")
       );
+      formData.set("clientMutationId", clientMutationId);
+      if (!isVehicleMode && ownerPrepaid) {
+        formData.set("ownerPrepaid", "true");
+      }
+      if (additionalTripExpense) {
+        formData.set("additionalTripExpense", "true");
+      }
+      if (isVehicleMode) {
+        appendReminderFieldsToFormData(formData, rawFormData);
+      }
 
+      let evidenceFile: File | null = null;
       if (hasEvidence) {
         setCompressing(true);
         const compressed = await compressImageFile(evidence);
@@ -105,11 +125,47 @@ export function DriverExpenseForm({
           );
         }
 
+        evidenceFile = compressed.file;
         formData.set("evidence", compressed.file, compressed.file.name);
       }
 
       if (tripId) {
         formData.set("tripId", tripId);
+      }
+
+      const goOfflineQueue = async (queuedMessage?: string) => {
+        await queueDriverExpense({
+          organizationId,
+          tripId,
+          vehicleMode: isVehicleMode,
+          categoryId: String(rawFormData.get("categoryId") ?? ""),
+          categoryName: selectedCategory?.name ?? "Gasto",
+          amount: parseMoneyValue(rawFormData.get("amount")),
+          notes: String(rawFormData.get("notes") ?? ""),
+          customDescription: String(rawFormData.get("customDescription") ?? ""),
+          ownerPrepaid: isVehicleMode ? false : ownerPrepaid,
+          additionalTripExpense,
+          ...(isVehicleMode ? readReminderQueueFields(rawFormData) : {}),
+          evidenceFile,
+        });
+        setSuccess(true);
+        setFileInfo(null);
+        setPreviewName(null);
+        setCategoryId("");
+        setOwnerPrepaid(false);
+        form.reset();
+        setAmountKey((k) => k + 1);
+        setLoading(false);
+        setError(
+          queuedMessage ??
+            "Sin conexión. El gasto quedó guardado y se enviará al reconectar."
+        );
+        onSuccess?.();
+      };
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await goOfflineQueue();
+        return;
       }
 
       const result = isVehicleMode
@@ -126,12 +182,44 @@ export function DriverExpenseForm({
       setFileInfo(null);
       setPreviewName(null);
       setCategoryId("");
+      setOwnerPrepaid(false);
       form.reset();
       setAmountKey((k) => k + 1);
       setLoading(false);
       onSuccess?.();
     } catch (err) {
       setCompressing(false);
+      if (isLikelyNetworkError(err)) {
+        try {
+        await queueDriverExpense({
+          organizationId,
+          tripId,
+          vehicleMode: isVehicleMode,
+          categoryId: String(rawFormData.get("categoryId") ?? ""),
+          categoryName: selectedCategory?.name ?? "Gasto",
+          amount: parseMoneyValue(rawFormData.get("amount")),
+          notes: String(rawFormData.get("notes") ?? ""),
+          customDescription: String(rawFormData.get("customDescription") ?? ""),
+          ownerPrepaid: isVehicleMode ? false : ownerPrepaid,
+          additionalTripExpense,
+          ...(isVehicleMode ? readReminderQueueFields(rawFormData) : {}),
+          evidenceFile:
+            hasEvidence && evidence instanceof File ? evidence : null,
+        });
+          setSuccess(true);
+          setError(
+            "Sin conexión. El gasto quedó guardado y se enviará al reconectar."
+          );
+          setOwnerPrepaid(false);
+          form.reset();
+          setAmountKey((k) => k + 1);
+          setLoading(false);
+          onSuccess?.();
+          return;
+        } catch {
+          // fall through
+        }
+      }
       setLoading(false);
       setError(
         err instanceof Error ? err.message : "Error al procesar la imagen."
@@ -192,42 +280,62 @@ export function DriverExpenseForm({
         </div>
       ) : null}
 
-      <div className="space-y-1.5">
-        <label htmlFor="categoryId" className="text-sm font-semibold">
-          {isVehicleMode ? "Tipo de gasto" : "Categoría"}
-        </label>
-        <select
-          id="categoryId"
-          name="categoryId"
-          required
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          className={driverFieldClassName()}
-        >
-          <option value="">
-            {isVehicleMode ? "SOAT, rodamiento, etc." : "¿En qué gastaste?"}
-          </option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {showOthersField && (
+      {additionalTripExpense ? (
         <div className="space-y-1.5">
           <label htmlFor="customDescription" className="text-sm font-semibold">
-            ¿De qué es el gasto? *
+            ¿De qué es el gasto adicional? *
           </label>
           <input
             id="customDescription"
             name="customDescription"
             required
-            placeholder="Ej: Parqueadero, herramienta, casco..."
+            placeholder="Ej: Multa, grúa, repuesto de emergencia..."
             className={driverFieldClassName()}
           />
+          <p className="text-xs text-muted-foreground">
+            Solo texto libre — no usa categorías. Se etiqueta como gasto adicional.
+          </p>
         </div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <label htmlFor="categoryId" className="text-sm font-semibold">
+              {isVehicleMode ? "Tipo de gasto" : "Categoría"}
+            </label>
+            <select
+              id="categoryId"
+              name="categoryId"
+              required
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className={driverFieldClassName()}
+            >
+              <option value="">
+                {isVehicleMode ? "SOAT, rodamiento, etc." : "¿En qué gastaste?"}
+              </option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {showOthersField && (
+            <div className="space-y-1.5">
+              <label htmlFor="customDescription" className="text-sm font-semibold">
+                ¿De qué es el gasto? *
+              </label>
+              <input
+                id="customDescription"
+                name="customDescription"
+                required
+                placeholder="Ej: Parqueadero, herramienta, casco..."
+                className={driverFieldClassName()}
+              />
+            </div>
+          )}
+        </>
       )}
 
       <div className="space-y-1.5">
@@ -243,6 +351,30 @@ export function DriverExpenseForm({
           className={driverFieldClassName("font-bold")}
         />
       </div>
+
+      {!isVehicleMode ? (
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+          <input
+            type="checkbox"
+            name="ownerPrepaid"
+            checked={ownerPrepaid}
+            onChange={(e) => setOwnerPrepaid(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">Anticipado</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+              Marca esto si la empresa pagó directamente (Coopass, cuenta de la
+              flota, etc.). El gasto queda registrado y también se descuenta como
+              anticipo en tu cuenta.
+            </span>
+          </span>
+        </label>
+      ) : null}
+
+      {isVehicleMode ? (
+        <VehicleReminderFormFields categoryLabel={selectedCategory?.name} />
+      ) : null}
 
       <div className="space-y-1.5">
         <label htmlFor="notes" className="text-sm font-semibold">
@@ -342,11 +474,17 @@ export function DriverExpenseForm({
       </div>
 
       {error && (
-        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p
+          className={`rounded-xl px-4 py-3 text-sm ${
+            error.includes("Sin conexión")
+              ? "bg-amber-50 text-amber-900"
+              : "bg-red-50 text-red-700"
+          }`}
+        >
           {error}
         </p>
       )}
-      {success && (
+      {success && !error && (
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           Gasto reportado correctamente.
@@ -368,7 +506,7 @@ export function DriverExpenseForm({
             Comprimiendo...
           </>
         ) : loading ? (
-          "Enviando..."
+          "Guardando..."
         ) : (
           <>
             <Send className="mr-2 h-5 w-5" />

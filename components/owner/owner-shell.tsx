@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -15,8 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { signOut } from "@/lib/actions/auth";
-import { useTransition } from "react";
+import { NavLink } from "@/components/shared/navigation-provider";
 import {
   getOrgCapabilities,
   type OrgCapabilities,
@@ -57,7 +55,7 @@ export function OwnerShell({ role, orgName, userEmail, children }: Props & { chi
   const caps = getOrgCapabilities(role);
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
   if (!caps) return <>{children}</>;
 
@@ -84,20 +82,22 @@ export function OwnerShell({ role, orgName, userEmail, children }: Props & { chi
             (item.href !== "/app" && pathname.startsWith(item.href));
           const Icon = item.icon;
           return (
-            <Link
+            <NavLink
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
+              isActive={active}
+              showSpinner={false}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 active:scale-[0.98]",
                 active
-                  ? "bg-brand text-brand-foreground"
+                  ? "bg-brand text-brand-foreground shadow-sm"
                   : "text-slate-300 hover:bg-white/10 hover:text-white"
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
               {item.label}
-            </Link>
+            </NavLink>
           );
         })}
       </nav>
@@ -109,9 +109,16 @@ export function OwnerShell({ role, orgName, userEmail, children }: Props & { chi
         </div>
         <button
           type="button"
-          onClick={() => startTransition(() => signOut())}
+          onClick={() => {
+            setPending(true);
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = "/api/auth/signout";
+            document.body.appendChild(form);
+            form.submit();
+          }}
           disabled={pending}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 transition-all duration-150 hover:bg-white/10 hover:text-white active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
         >
           <LogOut className="h-4 w-4" />
           {pending ? "Saliendo..." : "Cerrar sesión"}
@@ -127,7 +134,7 @@ export function OwnerShell({ role, orgName, userEmail, children }: Props & { chi
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="rounded-lg p-2 hover:bg-muted"
+          className="cursor-pointer rounded-lg p-2 transition-all duration-150 hover:bg-muted active:scale-95"
           aria-label="Abrir menú"
         >
           <Menu className="h-5 w-5" />

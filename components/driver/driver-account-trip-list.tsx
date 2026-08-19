@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import type { TripEarningRow } from "@/lib/reports/driver-account-statement";
+import { getOthersExpenseDetail } from "@/lib/expenses/category-utils";
 import { DriverExpenseRow } from "@/components/driver/driver-expense-row";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +84,10 @@ export function DriverAccountTripList({
                     <DriverExpenseRow
                       expenseId={expense.id}
                       categoryName={expense.categoryName}
+                      categoryDetail={getOthersExpenseDetail(
+                        expense.categoryName,
+                        expense.notes
+                      )}
                       amount={expense.amount}
                       dateLabel={new Date(expense.createdAt).toLocaleDateString(
                         "es-CO"

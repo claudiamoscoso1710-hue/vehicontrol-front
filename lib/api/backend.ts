@@ -12,6 +12,31 @@ function getBackendUrl() {
   return url.replace(/\/$/, "");
 }
 
+const BACKEND_TIMEOUT_MS = 20_000;
+
+async function fetchBackend(path: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
+
+  try {
+    return await fetch(`${getBackendUrl()}${path}`, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(
+        "El servidor tardó demasiado en responder. Verifica que vehicontrol-back esté corriendo."
+      );
+    }
+    throw new Error(
+      "No se pudo conectar con el backend. ¿Está vehicontrol-back en marcha (puerto 8080)?"
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function getAccessToken() {
   const supabase = await createClient();
   const {
@@ -35,15 +60,37 @@ async function getAccessToken() {
 }
 
 async function parseBackendResponse<T>(response: Response): Promise<T> {
-  let data: T;
-  try {
-    data = (await response.json()) as T;
-  } catch {
+  const text = await response.text();
+  let data: T | null = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text) as T;
+    } catch {
+      // Respuesta no JSON (p. ej. "Internal Server Error" de Hono).
+    }
+  }
+
+  if (!response.ok) {
+    const fromJson =
+      data &&
+      typeof data === "object" &&
+      data !== null &&
+      "error" in data &&
+      typeof (data as { error?: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : null;
+
     throw new Error(
-      response.ok
-        ? "Respuesta inválida del servidor."
-        : `Error del servidor (${response.status}). Verifica BACKEND_URL en Netlify.`
+      fromJson ??
+        (text && text.length < 200
+          ? `Backend ${response.status}: ${text}`
+          : `Backend respondió ${response.status}. Revisa vehicontrol-back (SUPABASE_URL/SUPABASE_ANON_KEY) y BACKEND_URL.`)
     );
+  }
+
+  if (data === null) {
+    throw new Error("Respuesta inválida del servidor.");
   }
 
   return data;
@@ -54,7 +101,7 @@ export async function callBackendJson<T>(
   body: Record<string, unknown>
 ): Promise<T> {
   const token = await getAccessToken();
-  const response = await fetch(`${getBackendUrl()}${path}`, {
+  const response = await fetchBackend(path, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -81,7 +128,7 @@ export async function callBackendForm<T>(
     payload.set(key, value);
   });
 
-  const response = await fetch(`${getBackendUrl()}${path}`, {
+  const response = await fetchBackend(path, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { CreateOrganizationForm } from "@/components/admin/create-organization-form";
+import { OrganizationDetailPanel } from "@/components/admin/organization-detail-panel";
 import { OrganizationStatusActions } from "@/components/admin/organization-status-actions";
 import { formatCurrency } from "@/lib/format";
+import { formatBillingBreakdown } from "@/lib/reports/org-vehicle-billing";
 
 export default async function AdminOrganizationsPage() {
   const supabase = await createClient();
@@ -16,7 +18,12 @@ export default async function AdminOrganizationsPage() {
 
   const orgIds = (organizations ?? []).map((o) => o.id);
 
-  const [{ data: vehicleCounts }, { data: memberCounts }] = await Promise.all([
+  const [
+    { data: vehicleCounts },
+    { data: memberCounts },
+    { data: ownerMembers },
+    { data: ownerPasswords },
+  ] = await Promise.all([
     orgIds.length
       ? supabase
           .from("vehicles")
@@ -30,6 +37,20 @@ export default async function AdminOrganizationsPage() {
           .select("organization_id")
           .in("organization_id", orgIds)
           .eq("status", "active")
+      : { data: [] },
+    orgIds.length
+      ? supabase
+          .from("organization_members")
+          .select("organization_id, user_id, profiles(email, full_name)")
+          .in("organization_id", orgIds)
+          .eq("role", "owner")
+          .eq("status", "active")
+      : { data: [] },
+    orgIds.length
+      ? supabase
+          .from("organization_owner_passwords")
+          .select("organization_id, user_id, password")
+          .in("organization_id", orgIds)
       : { data: [] },
   ]);
 
@@ -49,6 +70,43 @@ export default async function AdminOrganizationsPage() {
     {}
   );
 
+  const passwordsByOrgUser = (ownerPasswords ?? []).reduce<
+    Record<string, Record<string, string>>
+  >((acc, row) => {
+    const byUser = acc[row.organization_id] ?? {};
+    byUser[row.user_id] = row.password;
+    acc[row.organization_id] = byUser;
+    return acc;
+  }, {});
+
+  const ownersByOrg = (ownerMembers ?? []).reduce<
+    Record<
+      string,
+      {
+        userId: string;
+        email: string;
+        fullName: string | null;
+        password: string | null;
+      }[]
+    >
+  >((acc, row) => {
+    const profile = Array.isArray(row.profiles)
+      ? row.profiles[0]
+      : row.profiles;
+
+    if (!profile?.email) return acc;
+
+    const list = acc[row.organization_id] ?? [];
+    list.push({
+      userId: row.user_id,
+      email: profile.email,
+      fullName: profile.full_name,
+      password: passwordsByOrgUser[row.organization_id]?.[row.user_id] ?? null,
+    });
+    acc[row.organization_id] = list;
+    return acc;
+  }, {});
+
   const pricePerVehicle = Number(plan?.price_per_vehicle ?? 30000);
 
   return (
@@ -56,7 +114,7 @@ export default async function AdminOrganizationsPage() {
       <header>
         <h1 className="text-2xl font-semibold">Organizaciones</h1>
         <p className="text-sm text-muted-foreground">
-          Clientes de la plataforma y su estado comercial
+          Clientes de la plataforma · cobro por camión activo
         </p>
       </header>
 
@@ -68,7 +126,7 @@ export default async function AdminOrganizationsPage() {
           {(organizations ?? []).map((org) => {
             const vehicles = activeVehiclesByOrg[org.id] ?? 0;
             const members = membersByOrg[org.id] ?? 0;
-            const mrr = vehicles * pricePerVehicle;
+            const owners = ownersByOrg[org.id] ?? [];
 
             return (
               <li key={org.id} className="rounded-lg border p-4 text-sm">
@@ -76,8 +134,8 @@ export default async function AdminOrganizationsPage() {
                   <div>
                     <p className="font-medium">{org.name}</p>
                     <p className="text-muted-foreground">
-                      {vehicles} vehículo(s) activo(s) · {members} usuario(s) · MRR{" "}
-                      {formatCurrency(mrr)}
+                      {members} usuario(s) ·{" "}
+                      {formatBillingBreakdown(vehicles, pricePerVehicle, formatCurrency)}
                     </p>
                     <p className="mt-1">
                       Estado:{" "}
@@ -99,6 +157,14 @@ export default async function AdminOrganizationsPage() {
                     currentStatus={org.status}
                   />
                 </div>
+
+                <OrganizationDetailPanel
+                  organizationId={org.id}
+                  initialName={org.name}
+                  owners={owners}
+                  pricePerVehicle={pricePerVehicle}
+                  activeVehicleCount={vehicles}
+                />
               </li>
             );
           })}

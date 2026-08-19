@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Receipt, X } from "lucide-react";
+import { PlusCircle, Receipt, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DriverExpenseForm } from "@/components/driver/expense-form";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ type Props = {
   categories: Category[];
   tripId?: string;
   vehicleMode?: boolean;
+  additionalMode?: boolean;
   assignedVehicle?: AssignedVehicle | null;
   submitLabel?: string;
   buttonLabel?: string;
@@ -32,6 +33,7 @@ export function DriverExpenseReportSheet({
   categories,
   tripId,
   vehicleMode = false,
+  additionalMode = false,
   assignedVehicle = null,
   submitLabel,
   buttonLabel = "Reportar gasto",
@@ -67,6 +69,8 @@ export function DriverExpenseReportSheet({
     window.setTimeout(() => setOpen(false), 1200);
   }
 
+  const Icon = additionalMode ? PlusCircle : Receipt;
+
   return (
     <>
       <button
@@ -74,12 +78,21 @@ export function DriverExpenseReportSheet({
         onClick={() => setOpen(true)}
         disabled={disabled}
         className={cn(
-          "flex w-full items-center gap-3 rounded-2xl border border-brand/25 bg-brand/5 px-4 py-4 text-left shadow-sm transition-all active:scale-[0.99]",
-          "hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
+          "flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left shadow-sm transition-all active:scale-[0.99]",
+          additionalMode
+            ? "border-violet-300/60 bg-violet-50 hover:border-violet-400/70 hover:bg-violet-100/80 disabled:cursor-not-allowed disabled:opacity-50"
+            : "border-brand/25 bg-brand/5 hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
         )}
       >
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground shadow-sm">
-          <Receipt className="h-5 w-5" />
+        <div
+          className={cn(
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm",
+            additionalMode
+              ? "bg-violet-600 text-white"
+              : "bg-brand text-brand-foreground"
+          )}
+        >
+          <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-base font-bold text-foreground">{buttonLabel}</p>
@@ -101,8 +114,15 @@ export function DriverExpenseReportSheet({
       >
         <header className="shrink-0 border-b border-border/60 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-              <Receipt className="h-5 w-5" />
+            <div
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                additionalMode
+                  ? "bg-violet-100 text-violet-700"
+                  : "bg-brand/10 text-brand"
+              )}
+            >
+              <Icon className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
               <h2
@@ -112,7 +132,9 @@ export function DriverExpenseReportSheet({
                 {sheetTitle}
               </h2>
               <p className="text-sm text-muted-foreground">
-                Completa los datos y adjunta el comprobante si tienes
+                {additionalMode
+                  ? "Se reembolsa en tu cuenta pero no afecta el cálculo de tu sueldo"
+                  : "Completa los datos y adjunta el comprobante si tienes"}
               </p>
             </div>
             <Button
@@ -134,6 +156,7 @@ export function DriverExpenseReportSheet({
             categories={categories}
             tripId={tripId}
             vehicleMode={vehicleMode}
+            additionalTripExpense={additionalMode}
             assignedVehicle={assignedVehicle}
             submitLabel={submitLabel}
             onSuccess={handleSuccess}

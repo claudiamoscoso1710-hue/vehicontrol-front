@@ -7,8 +7,7 @@ import {
   Clock,
   Route,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { getActiveOrganization } from "@/lib/auth/get-active-organization";
+import { getOwnerContext } from "@/lib/auth/cached-auth";
 import {
   ClientFreightList,
   type ClientFreightItem,
@@ -57,15 +56,10 @@ function mapFreight(trip: {
 
 export default async function ClientDetailPage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getOwnerContext();
+  if (!ctx) return null;
 
-  if (!user) return null;
-
-  const org = await getActiveOrganization(supabase, user.id);
-  if (!org) return null;
+  const { supabase, org } = ctx;
 
   const { data: client } = await supabase
     .from("clients")

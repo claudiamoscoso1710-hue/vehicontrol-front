@@ -1,6 +1,5 @@
 import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
-import { getActiveOrganization } from "@/lib/auth/get-active-organization";
+import { getOwnerContext } from "@/lib/auth/cached-auth";
 import { DriverAccountView } from "@/components/shared/driver-account-view";
 import { DriverSettlementPanel } from "@/components/owner/driver-settlement-panel";
 import { SettlementPeriodControls } from "@/components/shared/settlement-period-controls";
@@ -15,15 +14,10 @@ type Props = {
 export default async function DriverAccountPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { period } = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getOwnerContext();
+  if (!ctx) return null;
 
-  if (!user) return null;
-
-  const org = await getActiveOrganization(supabase, user.id);
-  if (!org) return null;
+  const { supabase, org } = ctx;
 
   const { data: driver } = await supabase
     .from("drivers")
@@ -51,7 +45,7 @@ export default async function DriverAccountPage({ params, searchParams }: Props)
   );
 
   return (
-    <main className="mx-auto max-w-4xl space-y-4 p-8">
+    <main className="mx-auto max-w-6xl space-y-4 p-8">
       <Link href="/app/drivers" className="text-sm text-brand hover:underline">
         ← Conductores
       </Link>

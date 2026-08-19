@@ -1,6 +1,7 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export async function getOrganizationSetting<T>(
+async function getOrganizationSettingImpl<T>(
   supabase: SupabaseClient,
   organizationId: string,
   key: string,
@@ -20,3 +21,5 @@ export async function getOrganizationSetting<T>(
 
   return parse(data.value);
 }
+
+export const getOrganizationSetting = cache(getOrganizationSettingImpl);

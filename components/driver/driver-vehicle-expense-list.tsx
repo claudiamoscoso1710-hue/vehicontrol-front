@@ -1,6 +1,7 @@
 "use client";
 
 import type { ExpenseRow } from "@/lib/reports/driver-account-statement";
+import { getOthersExpenseDetail } from "@/lib/expenses/category-utils";
 import { DriverExpenseRow } from "@/components/driver/driver-expense-row";
 
 type Props = {
@@ -20,6 +21,10 @@ export function DriverVehicleExpenseList({ expenses, emptyMessage }: Props) {
           <DriverExpenseRow
             expenseId={expense.id}
             categoryName={expense.categoryName}
+            categoryDetail={getOthersExpenseDetail(
+              expense.categoryName,
+              expense.notes
+            )}
             amount={expense.amount}
             dateLabel={new Date(expense.createdAt).toLocaleDateString("es-CO")}
             subtitle={

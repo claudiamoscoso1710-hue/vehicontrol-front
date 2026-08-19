@@ -1,17 +1,15 @@
-import { Suspense } from "react";
 import { Route } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthSupabase } from "@/lib/auth/cached-auth";
 import { DriverExpenseReportSheet } from "@/components/driver/driver-expense-report-sheet";
 import { DriverRegisterTripForm } from "@/components/driver/driver-register-trip-form";
 import { DriverFinishTripButton } from "@/components/driver/driver-finish-trip-button";
 import { DriverEditTripForm } from "@/components/driver/driver-edit-trip-form";
 import { DriverExpenseList } from "@/components/driver/driver-expense-list";
-import {
-  DriverBalanceSection,
-  DriverBalanceSectionFallback,
-} from "@/components/driver/driver-balance-section";
+import { DriverBalanceCard } from "@/components/driver/driver-balance-card";
+import { DriverHomeSnapshot } from "@/components/driver/driver-home-snapshot";
 import { formatCurrency } from "@/lib/format";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { loadDriverHome } from "@/lib/reports/load-driver-home";
 import {
   DriverEmptyState,
   DriverPageContainer,
@@ -22,20 +20,6 @@ import {
   DriverStepIndicator,
 } from "@/components/driver/driver-ui";
 
-type TripRow = {
-  id: string;
-  origin: string;
-  destination: string;
-  status: string;
-  freight_value: number | null;
-  vehicles: { plate: string } | { plate: string }[] | null;
-};
-
-function getVehicle(trip: TripRow) {
-  const v = trip.vehicles;
-  return Array.isArray(v) ? v[0] : v;
-}
-
 function getGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Buenos días";
@@ -44,126 +28,39 @@ function getGreeting() {
 }
 
 export default async function DriverPage() {
-  const supabase = await createClient();
+  const supabase = await getAuthSupabase();
+  const home = await loadDriverHome(supabase);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: driverProfile } = await supabase
-    .from("drivers")
-    .select("id, full_name, organization_id, organizations(name)")
-    .eq("user_id", user?.id ?? "")
-    .maybeSingle();
-
-  const orgId = driverProfile?.organization_id;
-
-  const { data: activeTrip } = orgId
-    ? await supabase
-        .from("trips")
-        .select("id, origin, destination, status, freight_value, vehicles(plate)")
-        .eq("driver_id", driverProfile.id)
-        .eq("status", "in_progress")
-        .maybeSingle()
-    : { data: null };
-
-  const { data: tripExpenses } =
-    activeTrip && orgId
-      ? await supabase
-          .from("expenses")
-          .select(
-            "id, amount, status, notes, category_id, created_at, expense_categories(name)"
-          )
-          .eq("trip_id", activeTrip.id)
-          .order("created_at", { ascending: false })
-      : { data: null };
-
-  const tripExpenseIds = (tripExpenses ?? []).map((expense) => expense.id);
-  const { data: tripEvidences } =
-    tripExpenseIds.length > 0
-      ? await supabase
-          .from("expense_evidences")
-          .select("expense_id")
-          .in("expense_id", tripExpenseIds)
-      : { data: [] };
-  const tripEvidenceSet = new Set(
-    (tripEvidences ?? []).map((row) => row.expense_id)
+  const driver = home.driver;
+  const currentTrip = home.activeTrip;
+  const firstName = driver?.fullName.split(" ")[0] ?? "conductor";
+  const expenseTotal = home.tripExpenses.reduce(
+    (sum, row) => sum + Number(row.amount),
+    0
   );
-  const tripExpensesWithEvidence = (tripExpenses ?? []).map((expense) => ({
-    ...expense,
-    hasEvidence: tripEvidenceSet.has(expense.id),
-  }));
-
-  const { data: openAdvances } =
-    activeTrip && orgId && driverProfile
-      ? await supabase
-          .from("advances")
-          .select("amount, trip_id")
-          .eq("driver_id", driverProfile.id)
-          .eq("organization_id", orgId)
-          .is("settlement_id", null)
-      : { data: null };
-
-  const advanceTotal = (openAdvances ?? [])
-    .filter(
-      (advance) =>
-        advance.trip_id === activeTrip?.id || advance.trip_id === null
-    )
-    .reduce((sum, row) => sum + Number(row.amount), 0);
-
-  const [{ data: categories }, { data: assignedVehicle }, { data: clients }] =
-    orgId
-    ? await Promise.all([
-        supabase
-          .from("expense_categories")
-          .select("id, name")
-          .eq("organization_id", orgId)
-          .order("name"),
-        supabase
-          .from("vehicles")
-          .select("id, plate, brand, operational_status")
-          .eq("organization_id", orgId)
-          .eq("assigned_driver_id", driverProfile!.id)
-          .eq("commercial_status", "active")
-          .maybeSingle(),
-        supabase
-          .from("clients")
-          .select("id, name")
-          .eq("organization_id", orgId)
-          .order("name"),
-      ])
-    : [{ data: null }, { data: null }, { data: null }];
-
-  const orgData = driverProfile?.organizations;
-  const org = Array.isArray(orgData) ? orgData[0] : orgData;
-  const firstName = driverProfile?.full_name?.split(" ")[0] ?? "conductor";
-  const currentTrip = activeTrip as TripRow | null;
-  const expenseTotal =
-    tripExpensesWithEvidence.reduce((sum, row) => sum + Number(row.amount), 0) ?? 0;
   const stepIndex = currentTrip ? 1 : 0;
 
   return (
     <DriverPageContainer>
+      <DriverHomeSnapshot data={home} />
       <DriverPageHeader
         eyebrow={getGreeting()}
         title={`Hola, ${firstName}`}
         subtitle={
-          org
-            ? `${(org as { name: string }).name} · ${currentTrip ? "Viaje en curso" : "Listo para salir"}`
+          driver?.organizationName
+            ? `${driver.organizationName} · ${currentTrip ? "Viaje en curso" : "Listo para salir"}`
             : undefined
         }
       />
 
-      {driverProfile && orgId ? (
-        <Suspense fallback={<DriverBalanceSectionFallback />}>
-          <DriverBalanceSection
-            organizationId={orgId}
-            driverId={driverProfile.id}
-          />
-        </Suspense>
+      {driver ? (
+        <DriverBalanceCard
+          netBalance={home.balance.netBalance}
+          hasPendingItems={home.balance.hasPendingItems}
+        />
       ) : null}
 
-      {driverProfile && orgId ? (
+      {driver ? (
         <>
           <DriverStepIndicator activeIndex={stepIndex} />
 
@@ -183,13 +80,13 @@ export default async function DriverPage() {
                   <DriverRouteVisual
                     origin={currentTrip.origin}
                     destination={currentTrip.destination}
-                    plate={getVehicle(currentTrip)?.plate}
+                    plate={currentTrip.vehiclePlate ?? undefined}
                   />
 
                   <div className="grid grid-cols-3 gap-2">
                     <DriverStatChip
                       label="Flete"
-                      value={formatCurrency(Number(currentTrip.freight_value ?? 0))}
+                      value={formatCurrency(Number(currentTrip.freightValue ?? 0))}
                       tone="brand"
                     />
                     <DriverStatChip
@@ -199,62 +96,84 @@ export default async function DriverPage() {
                     />
                     <DriverStatChip
                       label="Anticipo"
-                      value={formatCurrency(advanceTotal)}
-                      tone={advanceTotal > 0 ? "success" : "neutral"}
+                      value={formatCurrency(home.openAdvanceTotal)}
+                      tone={home.openAdvanceTotal > 0 ? "success" : "neutral"}
                     />
                   </div>
 
                   <DriverEditTripForm
-                    organizationId={orgId}
+                    organizationId={driver.organizationId}
                     tripId={currentTrip.id}
                     origin={currentTrip.origin}
                     destination={currentTrip.destination}
-                    freightValue={Number(currentTrip.freight_value ?? 0)}
+                    freightValue={Number(currentTrip.freightValue ?? 0)}
                   />
                 </div>
               </section>
 
-              {categories && categories.length > 0 && (
+              {home.categories.length > 0 && (
                 <DriverExpenseReportSheet
-                  organizationId={orgId}
+                  organizationId={driver.organizationId}
                   tripId={currentTrip.id}
-                  categories={categories}
+                  categories={home.categories}
                   buttonHint="Peajes, combustible, parqueadero..."
                 />
               )}
+              <DriverExpenseReportSheet
+                organizationId={driver.organizationId}
+                tripId={currentTrip.id}
+                categories={[]}
+                additionalMode
+                buttonLabel="Reportar gasto adicional"
+                sheetTitle="Gasto adicional del viaje"
+                submitLabel="Enviar gasto adicional"
+                buttonHint="Reembolsable, no afecta tu sueldo · solo texto libre"
+              />
 
               <DriverSectionCard title="Cerrar viaje" icon={Route}>
                 <DriverFinishTripButton
                   tripId={currentTrip.id}
-                  organizationId={orgId}
-                  expenseCount={tripExpensesWithEvidence.length}
+                  organizationId={driver.organizationId}
+                  expenseCount={home.tripExpenses.length}
                   expenseTotal={expenseTotal}
                 />
               </DriverSectionCard>
 
-              {tripExpensesWithEvidence.length > 0 && categories && (
+              {home.tripExpenses.length > 0 && (
                 <DriverExpenseList
-                  organizationId={orgId}
-                  categories={categories}
-                  expenses={tripExpensesWithEvidence}
+                  organizationId={driver.organizationId}
+                  categories={home.categories}
+                  expenses={home.tripExpenses.map((expense) => ({
+                    id: expense.id,
+                    amount: expense.amount,
+                    notes: expense.notes,
+                    owner_prepaid: expense.ownerPrepaid,
+                    additional_trip_expense: expense.additionalTripExpense,
+                    created_at: expense.createdAt,
+                    category_id: expense.categoryId,
+                    hasEvidence: expense.hasEvidence,
+                    expense_categories: expense.categoryName
+                      ? { name: expense.categoryName }
+                      : null,
+                  }))}
                 />
               )}
             </>
           ) : (
             <DriverSectionCard title="Nuevo viaje" icon={Route}>
               <DriverRegisterTripForm
-                organizationId={orgId}
+                organizationId={driver.organizationId}
                 assignedVehicle={
-                  assignedVehicle
+                  home.assignedVehicle
                     ? {
-                        plate: assignedVehicle.plate,
-                        brand: assignedVehicle.brand,
+                        plate: home.assignedVehicle.plate,
+                        brand: home.assignedVehicle.brand,
                       }
                     : null
                 }
-                clients={(clients ?? []).map((c) => ({
-                  id: c.id,
-                  label: c.name,
+                clients={home.clients.map((client) => ({
+                  id: client.id,
+                  label: client.name,
                 }))}
               />
             </DriverSectionCard>

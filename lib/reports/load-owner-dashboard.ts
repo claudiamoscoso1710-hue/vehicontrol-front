@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import {
   resolveDashboardMonthContext,
   type DashboardMonthContext,
@@ -32,11 +33,18 @@ export type OwnerDashboardMetrics = {
   }[];
 };
 
-export async function loadOwnerDashboardMetrics(
+export type OwnerDashboardCore = Omit<
+  OwnerDashboardMetrics,
+  "vehicleProfitability" | "recentTrips"
+>;
+
+export type OwnerRecentTrip = OwnerDashboardMetrics["recentTrips"][number];
+
+export const loadOwnerDashboardCore = cache(async function loadOwnerDashboardCore(
   supabase: SupabaseClient,
   organizationId: string,
   monthParam?: string | null
-): Promise<OwnerDashboardMetrics> {
+): Promise<OwnerDashboardCore> {
   const monthContext = resolveDashboardMonthContext(monthParam);
   const { start, end } = monthContext;
 
@@ -45,7 +53,6 @@ export async function loadOwnerDashboardMetrics(
     { count: monthTripCount },
     { data: expenses },
     { data: incomes },
-    { data: recentTrips },
     { data: settlements },
   ] = await Promise.all([
     monthContext.isCurrentMonth
@@ -75,14 +82,6 @@ export async function loadOwnerDashboardMetrics(
       .gte("created_at", start)
       .lt("created_at", end),
     supabase
-      .from("trips")
-      .select("id, origin, destination, status, freight_value, created_at, vehicles(plate)")
-      .eq("organization_id", organizationId)
-      .gte("created_at", start)
-      .lt("created_at", end)
-      .order("created_at", { ascending: false })
-      .limit(5),
-    supabase
       .from("driver_settlements")
       .select("net_balance")
       .eq("organization_id", organizationId)
@@ -106,15 +105,6 @@ export async function loadOwnerDashboardMetrics(
   const totalSettledNet =
     settlements?.reduce((sum, row) => sum + Number(row.net_balance), 0) ?? 0;
 
-  const vehicleProfitability = await getVehicleProfitability(
-    supabase,
-    organizationId,
-    {
-      since: new Date(start),
-      until: new Date(end),
-    }
-  );
-
   return {
     monthContext,
     totalIncome,
@@ -127,7 +117,45 @@ export async function loadOwnerDashboardMetrics(
     monthTripCount: monthTripCount ?? 0,
     settlementsInMonth: settlements?.length ?? 0,
     totalSettledNet,
+  };
+});
+
+export const loadOwnerRecentTrips = cache(async function loadOwnerRecentTrips(
+  supabase: SupabaseClient,
+  organizationId: string,
+  monthParam?: string | null
+): Promise<OwnerRecentTrip[]> {
+  const { start, end } = resolveDashboardMonthContext(monthParam);
+
+  const { data: recentTrips } = await supabase
+    .from("trips")
+    .select("id, origin, destination, status, freight_value, created_at, vehicles(plate)")
+    .eq("organization_id", organizationId)
+    .gte("created_at", start)
+    .lt("created_at", end)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  return recentTrips ?? [];
+});
+
+export async function loadOwnerDashboardMetrics(
+  supabase: SupabaseClient,
+  organizationId: string,
+  monthParam?: string | null
+): Promise<OwnerDashboardMetrics> {
+  const [core, vehicleProfitability, recentTrips] = await Promise.all([
+    loadOwnerDashboardCore(supabase, organizationId, monthParam),
+    getVehicleProfitability(supabase, organizationId, {
+      since: new Date(resolveDashboardMonthContext(monthParam).start),
+      until: new Date(resolveDashboardMonthContext(monthParam).end),
+    }),
+    loadOwnerRecentTrips(supabase, organizationId, monthParam),
+  ]);
+
+  return {
+    ...core,
     vehicleProfitability,
-    recentTrips: recentTrips ?? [],
+    recentTrips,
   };
 }

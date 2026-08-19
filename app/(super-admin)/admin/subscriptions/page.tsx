@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/format";
+import { formatBillingBreakdown } from "@/lib/reports/org-vehicle-billing";
 
 export default async function AdminSubscriptionsPage() {
   const supabase = await createClient();
@@ -10,26 +11,27 @@ export default async function AdminSubscriptionsPage() {
     supabase
       .from("subscriptions")
       .select(
-        "id, status, created_at, organizations(id, name), plans(name, price_per_vehicle)"
+        "id, status, organization_id, created_at, organizations(id, name), plans(name, price_per_vehicle)"
       )
       .order("created_at", { ascending: false }),
   ]);
 
-  const subscriptionIds = (subscriptions ?? []).map((s) => s.id);
+  const orgIds = [
+    ...new Set((subscriptions ?? []).map((s) => s.organization_id as string)),
+  ];
 
-  const { data: subscriptionVehicles } = subscriptionIds.length
+  const { data: activeVehiclesByOrgRows } = orgIds.length
     ? await supabase
-        .from("subscription_vehicles")
-        .select("subscription_id, vehicle_id, ended_at")
-        .in("subscription_id", subscriptionIds)
+        .from("vehicles")
+        .select("organization_id")
+        .in("organization_id", orgIds)
+        .eq("commercial_status", "active")
     : { data: [] };
 
-  const activeVehiclesBySub = (subscriptionVehicles ?? []).reduce<
+  const activeVehiclesByOrg = (activeVehiclesByOrgRows ?? []).reduce<
     Record<string, number>
   >((acc, row) => {
-    if (!row.ended_at) {
-      acc[row.subscription_id] = (acc[row.subscription_id] ?? 0) + 1;
-    }
+    acc[row.organization_id] = (acc[row.organization_id] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -38,18 +40,18 @@ export default async function AdminSubscriptionsPage() {
       <header>
         <h1 className="text-2xl font-semibold">Suscripciones</h1>
         <p className="text-sm text-muted-foreground">
-          Planes y facturación por vehículo activo
+          Cobro mensual por cada camión activo en la flota del cliente
         </p>
       </header>
 
       <section className="rounded-lg border p-4">
-        <h2 className="mb-3 font-medium">Planes disponibles</h2>
+        <h2 className="mb-3 font-medium">Tarifa por camión</h2>
         <ul className="space-y-2 text-sm">
           {(plans ?? []).map((plan) => (
             <li key={plan.id} className="flex justify-between">
               <span>{plan.name}</span>
               <span className="font-medium">
-                {formatCurrency(Number(plan.price_per_vehicle))}/vehículo/mes
+                {formatCurrency(Number(plan.price_per_vehicle))}/camión/mes
               </span>
             </li>
           ))}
@@ -60,15 +62,15 @@ export default async function AdminSubscriptionsPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 font-medium">Suscripciones activas</h2>
+        <h2 className="mb-3 font-medium">Facturación por organización</h2>
         <ul className="space-y-3">
           {(subscriptions ?? []).map((sub) => {
             const org = Array.isArray(sub.organizations)
               ? sub.organizations[0]
               : sub.organizations;
             const plan = Array.isArray(sub.plans) ? sub.plans[0] : sub.plans;
-            const vehicleCount = activeVehiclesBySub[sub.id] ?? 0;
-            const monthly = vehicleCount * Number(plan?.price_per_vehicle ?? 0);
+            const vehicleCount = activeVehiclesByOrg[sub.organization_id] ?? 0;
+            const pricePerVehicle = Number(plan?.price_per_vehicle ?? 0);
 
             return (
               <li key={sub.id} className="rounded-lg border p-4 text-sm">
@@ -76,11 +78,14 @@ export default async function AdminSubscriptionsPage() {
                   <div>
                     <p className="font-medium">{(org as { name: string } | null)?.name}</p>
                     <p className="text-muted-foreground">
-                      Plan {(plan as { name: string } | null)?.name} · {vehicleCount}{" "}
-                      vehículo(s) facturable(s)
+                      Plan {(plan as { name: string } | null)?.name}
                     </p>
                     <p className="mt-1 font-medium">
-                      Mensualidad: {formatCurrency(monthly)}
+                      {formatBillingBreakdown(
+                        vehicleCount,
+                        pricePerVehicle,
+                        formatCurrency
+                      )}
                     </p>
                   </div>
                   <span
@@ -103,11 +108,11 @@ export default async function AdminSubscriptionsPage() {
           )}
         </ul>
         <p className="mt-4 text-sm text-muted-foreground">
-          Los vehículos se vinculan a la suscripción al aprobarse en{" "}
+          Al registrar o dar de baja un camión en{" "}
           <Link href="/admin/vehicles" className="text-blue-600 hover:underline">
-            Vehículos pendientes
+            Vehículos
           </Link>
-          .
+          , la mensualidad se recalcula automáticamente.
         </p>
       </section>
     </main>

@@ -3,26 +3,28 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { requestVehicle } from "@/lib/actions/vehicles";
+import { createVehicleBySuperAdmin } from "@/lib/actions/vehicles";
 
-type Props = {
-  organizationId: string;
+type OrgOption = {
+  id: string;
+  name: string;
 };
 
-export function RequestVehicleForm({ organizationId }: Props) {
+type Props = {
+  organizations: OrgOption[];
+};
+
+export function CreateVehicleForm({ organizations }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setSuccess(false);
 
-    const formData = new FormData(e.currentTarget);
-    const result = await requestVehicle(organizationId, formData);
+    const result = await createVehicleBySuperAdmin(new FormData(e.currentTarget));
 
     if (!result.success) {
       setError(result.error);
@@ -30,7 +32,6 @@ export function RequestVehicleForm({ organizationId }: Props) {
       return;
     }
 
-    setSuccess(true);
     e.currentTarget.reset();
     router.refresh();
     setLoading(false);
@@ -38,12 +39,26 @@ export function RequestVehicleForm({ organizationId }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border p-4">
-      <h2 className="font-medium">Solicitar nuevo vehículo</h2>
-      <p className="text-sm text-muted-foreground">
-        Quedará en estado pendiente hasta aprobación del Super Admin.
+      <h2 className="font-medium">Registrar vehículo</h2>
+      <p className="text-xs text-muted-foreground">
+        Solo Super Admin puede dar de alta vehículos en la plataforma.
       </p>
-
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <select
+          name="organizationId"
+          required
+          className="rounded-md border px-3 py-2 text-sm"
+          defaultValue=""
+        >
+          <option value="" disabled>
+            Organización *
+          </option>
+          {organizations.map((org) => (
+            <option key={org.id} value={org.id}>
+              {org.name}
+            </option>
+          ))}
+        </select>
         <input
           name="plate"
           placeholder="Placa *"
@@ -52,25 +67,18 @@ export function RequestVehicleForm({ organizationId }: Props) {
         />
         <input
           name="brand"
-          placeholder="Marca"
+          placeholder="Marca (opcional)"
           className="rounded-md border px-3 py-2 text-sm"
         />
         <input
           name="vehicleType"
-          placeholder="Tipo (ej. FVR)"
+          placeholder="Tipo (opcional)"
           className="rounded-md border px-3 py-2 text-sm"
         />
       </div>
-
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {success && (
-        <p className="text-sm text-green-700">
-          Solicitud enviada. Espera aprobación del Super Admin.
-        </p>
-      )}
-
-      <Button type="submit" disabled={loading}>
-        {loading ? "Enviando..." : "Solicitar vehículo"}
+      <Button type="submit" disabled={loading || organizations.length === 0}>
+        {loading ? "Creando..." : "Crear vehículo"}
       </Button>
     </form>
   );

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { DriverShell } from "@/components/driver/driver-shell";
 import { PwaRegister } from "@/components/driver/pwa-register";
+import { getDriverContext } from "@/lib/auth/cached-auth";
+import { loadDriverVehicleExpenseReminders } from "@/lib/reports/load-vehicle-expense-reminders";
 
 export const metadata: Metadata = {
   title: "Conductor · SaaS Camiones",
@@ -26,14 +28,19 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function DriverLayout({
+export default async function DriverLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const ctx = await getDriverContext();
+  const reminders = ctx
+    ? await loadDriverVehicleExpenseReminders(ctx.supabase, ctx.driver.id)
+    : [];
+
   return (
     <PwaRegister>
-      <DriverShell>{children}</DriverShell>
+      <DriverShell reminders={reminders}>{children}</DriverShell>
     </PwaRegister>
   );
 }

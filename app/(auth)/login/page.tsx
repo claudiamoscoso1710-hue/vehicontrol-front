@@ -1,45 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Truck } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { signIn, type SignInState } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { inputClassName } from "@/components/ui/page-header";
 import { Card, CardBody } from "@/components/ui/card";
-
-const DEMO_HINT = "Demo2026!";
+import { useNavigationControl } from "@/components/shared/navigation-provider";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { endNavigation } = useNavigationControl();
+  const [state, formAction, pending] = useActionState<SignInState, FormData>(
+    signIn,
+    null
+  );
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(signInError.message);
-      setLoading(false);
-      return;
+  useEffect(() => {
+    if (state?.error) {
+      endNavigation();
     }
-
-    window.location.href = "/";
-  }
-
-  const quickLogins = [
-    { label: "Dueño", email: "owner.alpha@demo.saas-camiones.test" },
-    { label: "Conductor", email: "driver.alpha@demo.saas-camiones.test" },
-    { label: "Super Admin", email: "superadmin@demo.saas-camiones.test" },
-  ];
+  }, [state, endNavigation]);
 
   return (
     <main className="flex min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -98,13 +80,14 @@ export default function LoginPage() {
               </p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form action={formAction} className="space-y-4">
               <div className="space-y-1.5">
                 <label htmlFor="email" className="text-sm font-medium">
                   Email
                 </label>
                 <input
                   id="email"
+                  name="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -120,6 +103,7 @@ export default function LoginPage() {
                 </label>
                 <input
                   id="password"
+                  name="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -128,41 +112,20 @@ export default function LoginPage() {
                 />
               </div>
 
-              {error && (
+              {state?.error && (
                 <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
+                  {state.error}
                 </p>
               )}
 
               <Button
                 type="submit"
                 className="h-11 w-full bg-brand text-brand-foreground hover:bg-brand/90"
-                disabled={loading}
+                disabled={pending}
               >
-                {loading ? "Ingresando..." : "Entrar"}
+                {pending ? "Ingresando..." : "Entrar"}
               </Button>
             </form>
-
-            <div className="border-t pt-4">
-              <p className="mb-3 text-xs font-medium text-muted-foreground">
-                Acceso rápido demo · contraseña {DEMO_HINT}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {quickLogins.map((q) => (
-                  <button
-                    key={q.email}
-                    type="button"
-                    onClick={() => {
-                      setEmail(q.email);
-                      setPassword(DEMO_HINT);
-                    }}
-                    className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:border-brand hover:bg-brand/5 hover:text-brand"
-                  >
-                    {q.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </CardBody>
         </Card>
       </div>

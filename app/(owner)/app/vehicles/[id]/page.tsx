@@ -7,13 +7,13 @@ import {
   TrendingUp,
   Truck,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { getActiveOrganization } from "@/lib/auth/get-active-organization";
+import { getOwnerContext } from "@/lib/auth/cached-auth";
 import { formatCurrency } from "@/lib/format";
 import {
   calculateOwnerTripDriverSalary,
   resolveTripCommissionPercent,
 } from "@/lib/reports/trip-owner-costs";
+import { sumTripExpensesForSalary } from "@/lib/expenses/salary-expenses";
 import { loadVehiclePeriodContext } from "@/lib/reports/load-vehicle-period-data";
 import {
   CURRENT_PERIOD_ID,
@@ -32,10 +32,12 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { FinancialBreakdownBar } from "@/components/owner/financial-breakdown-bar";
 import { AssignDriverForm } from "@/components/owner/assign-driver-form";
 import { SettlementPeriodControls } from "@/components/shared/settlement-period-controls";
+import { buildVehicleSettlementSpreadsheet } from "@/lib/reports/build-vehicle-settlement-spreadsheet";
+import { getSalaryBasisLabel } from "@/lib/settings/driver-compensation";
+import { SettlementSpreadsheetTable } from "@/components/owner/settlement-spreadsheet-table";
+import { VehicleReportedExpensesKpi } from "@/components/owner/vehicle-reported-expenses-kpi";
 import {
-  VehicleReportedExpenses,
   type VehicleExpenseItem,
-  type VehicleTripWithExpenses,
 } from "@/components/owner/vehicle-reported-expenses";
 
 export default async function VehicleDetailPage({
@@ -47,15 +49,10 @@ export default async function VehicleDetailPage({
 }) {
   const { id } = await params;
   const { period } = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getOwnerContext();
+  if (!ctx) return null;
 
-  if (!user) return null;
-
-  const org = await getActiveOrganization(supabase, user.id);
-  if (!org) return null;
+  const { supabase, org } = ctx;
 
   const { data: vehicle } = await supabase
     .from("vehicles")
@@ -88,7 +85,7 @@ export default async function VehicleDetailPage({
   let expensesQuery = supabase
     .from("expenses")
     .select(
-      "id, amount, status, notes, created_at, trip_id, settlement_id, expense_categories(name), drivers(full_name), trips(origin, destination)"
+      "id, amount, status, notes, owner_prepaid, additional_trip_expense, created_at, trip_id, settlement_id, expense_categories(name), drivers(full_name), trips(origin, destination)"
     )
     .eq("organization_id", org.organizationId)
     .eq("vehicle_id", id)
@@ -120,7 +117,23 @@ export default async function VehicleDetailPage({
         : tripsQuery.eq("settlement_id", periodContext.periodId);
   }
 
-  const [{ data: incomes }, { data: expenses }, { data: trips }, { data: drivers }] =
+  let advancesQuery =
+    periodContext && vehicle.assigned_driver_id
+      ? supabase
+          .from("advances")
+          .select("id, amount, status, created_at, delivered_by_name")
+          .eq("organization_id", org.organizationId)
+          .eq("driver_id", vehicle.assigned_driver_id)
+      : null;
+
+  if (advancesQuery && periodContext) {
+    advancesQuery =
+      periodContext.periodId === CURRENT_PERIOD_ID
+        ? advancesQuery.is("settlement_id", null)
+        : advancesQuery.eq("settlement_id", periodContext.periodId);
+  }
+
+  const [{ data: incomes }, { data: expenses }, { data: trips }, { data: drivers }, advancesResult] =
     await Promise.all([
       supabase
         .from("incomes")
@@ -135,7 +148,12 @@ export default async function VehicleDetailPage({
         .eq("organization_id", org.organizationId)
         .eq("status", "active")
         .order("full_name"),
+      advancesQuery
+        ? advancesQuery.order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] as { id: string; amount: number; status: string; created_at: string; delivered_by_name: string | null }[] }),
     ]);
+
+  const advances = advancesResult.data ?? [];
 
   const expenseIds = (expenses ?? []).map((expense) => expense.id);
   const { data: evidences } =
@@ -166,6 +184,8 @@ export default async function VehicleDetailPage({
       expense_categories: expense.expense_categories,
       drivers: expense.drivers,
       hasEvidence: evidenceSet.has(expense.id),
+      additional_trip_expense: Boolean(expense.additional_trip_expense),
+      owner_prepaid: Boolean(expense.owner_prepaid),
     };
   });
 
@@ -179,39 +199,39 @@ export default async function VehicleDetailPage({
     expensesByTripId.set(expense.trip_id, current);
   }
 
-  const tripsWithExpenses: VehicleTripWithExpenses[] = (trips ?? [])
-    .map((trip) => {
-      const driver = Array.isArray(trip.drivers) ? trip.drivers[0] : trip.drivers;
-      const commissionPercent = resolveTripCommissionPercent(
-        orgConfig,
-        driver?.commission_percent
-      );
-      const tripExpenses = expensesByTripId.get(trip.id) ?? [];
-      const approvedExpenseTotal = tripExpenses.reduce(
-        (sum, expense) => sum + expense.amount,
-        0
-      );
-      const freightValue = Number(trip.freight_value ?? 0);
-      const driverSalary = calculateOwnerTripDriverSalary(
-        freightValue,
-        approvedExpenseTotal,
-        commissionPercent
-      );
+  const periodTrips = (trips ?? []).map((trip) => {
+    const driver = Array.isArray(trip.drivers) ? trip.drivers[0] : trip.drivers;
+    const commissionPercent = resolveTripCommissionPercent(
+      orgConfig,
+      driver?.commission_percent
+    );
+    const tripExpenses = expensesByTripId.get(trip.id) ?? [];
+    const salaryExpenseTotal = sumTripExpensesForSalary(tripExpenses);
+    const freightValue = Number(trip.freight_value ?? 0);
+    const driverSalary = calculateOwnerTripDriverSalary(
+      freightValue,
+      salaryExpenseTotal,
+      commissionPercent,
+      orgConfig.salary_basis
+    );
 
-      return {
-        id: trip.id,
-        origin: trip.origin,
-        destination: trip.destination,
-        status: trip.status,
-        freightValue,
-        createdAt: trip.created_at,
-        driverName: driver?.full_name ?? null,
-        commissionPercent,
-        driverSalary,
-        expenses: tripExpenses,
-      };
-    })
-    .filter((trip) => trip.expenses.length > 0 || trip.driverSalary > 0);
+    return {
+      id: trip.id,
+      origin: trip.origin,
+      destination: trip.destination,
+      status: trip.status,
+      freightValue,
+      createdAt: trip.created_at,
+      driverName: driver?.full_name ?? null,
+      commissionPercent,
+      driverSalary,
+      expenses: tripExpenses,
+    };
+  });
+
+  const tripsWithExpenses = periodTrips.filter(
+    (trip) => trip.expenses.length > 0 || trip.driverSalary > 0
+  );
 
   const tripIdsInPeriod = new Set((trips ?? []).map((trip) => trip.id));
   const filteredIncomes = (incomes ?? []).filter(
@@ -220,16 +240,45 @@ export default async function VehicleDetailPage({
 
   const totalIncome =
     filteredIncomes.reduce((sum, row) => sum + Number(row.amount), 0) ?? 0;
-  const driverSalaryTotal = tripsWithExpenses.reduce(
+  const tripExpenseTotal = periodTrips.reduce(
+    (sum, trip) => sum + trip.expenses.reduce((s, e) => s + e.amount, 0),
+    0
+  );
+  const vehicleExpenseTotal = vehicleOnlyExpenses.reduce(
+    (sum, row) => sum + row.amount,
+    0
+  );
+
+  const spreadsheetData = buildVehicleSettlementSpreadsheet({
+    trips: periodTrips,
+    vehicleExpenses: vehicleOnlyExpenses,
+    advances,
+    vehiclePlate: vehicle.plate,
+    commissionPercent: orgConfig.commission_percent,
+    salaryBasis: orgConfig.salary_basis,
+  });
+  const driverSalaryTotal = periodTrips.reduce(
     (sum, trip) => sum + trip.driverSalary,
     0
   );
   const reportedExpenses =
     mappedExpenses.reduce((sum, row) => sum + row.amount, 0) + driverSalaryTotal;
-  const margin = totalIncome - reportedExpenses;
+
+  const periodFreight = periodContext
+    ? spreadsheetData.totals.freight
+    : totalIncome;
+  const periodMargin = periodContext
+    ? spreadsheetData.totals.netMargin
+    : totalIncome - reportedExpenses;
+  const pendingFreight = spreadsheetData.totals.pendingFreight;
+  const pendingTotal =
+    spreadsheetData.totals.pendingFreight +
+    spreadsheetData.totals.pendingTripExpenses +
+    spreadsheetData.totals.pendingDriverSalary;
   const marginPct =
-    totalIncome > 0 ? Math.round((margin / totalIncome) * 100) : 0;
+    periodFreight > 0 ? Math.round((periodMargin / periodFreight) * 100) : 0;
   const closedTrips = (trips ?? []).filter((t) => t.status === "closed").length;
+  const inProgressTrips = (trips ?? []).filter((t) => t.status === "in_progress").length;
   const canAssignDriver = ["owner", "admin"].includes(org.role);
 
   return (
@@ -283,27 +332,45 @@ export default async function VehicleDetailPage({
               <p className="text-sm text-muted-foreground">
                 {periodContext
                   ? periodContext.isCurrent
-                    ? "Utilidad del período actual"
-                    : "Utilidad del período seleccionado"
+                    ? "Utilidad confirmada del período actual"
+                    : "Utilidad confirmada del período seleccionado"
                   : "Utilidad histórica"}
               </p>
               <p
                 className={`text-3xl font-bold ${
-                  margin >= 0 ? "text-emerald-600" : "text-red-600"
+                  periodMargin >= 0 ? "text-emerald-600" : "text-red-600"
                 }`}
               >
-                {formatCurrency(margin)}
+                {formatCurrency(periodMargin)}
               </p>
-              {totalIncome > 0 && (
+              {periodFreight > 0 && (
                 <p className="text-sm text-muted-foreground">
-                  {marginPct}% de los fletes · {closedTrips} viajes cerrados
+                  {marginPct}% sobre fletes cerrados ·{" "}
+                  {closedTrips === 1
+                    ? "1 viaje cerrado"
+                    : `${closedTrips} viajes cerrados`}
+                  {inProgressTrips > 0
+                    ? ` · ${inProgressTrips} en curso (pendiente)`
+                    : ""}
                 </p>
               )}
+              {pendingTotal > 0 ? (
+                <p className="mt-1 text-xs text-amber-800">
+                  Pendiente en viajes en curso: flete {formatCurrency(pendingFreight)}
+                  {spreadsheetData.totals.pendingTripExpenses > 0
+                    ? ` · gastos ${formatCurrency(spreadsheetData.totals.pendingTripExpenses)}`
+                    : ""}
+                  {spreadsheetData.totals.pendingDriverSalary > 0
+                    ? ` · sueldo est. ${formatCurrency(spreadsheetData.totals.pendingDriverSalary)}`
+                    : ""}
+                  . No suma a utilidad hasta cerrar.
+                </p>
+              ) : null}
             </div>
           </div>
           <FinancialBreakdownBar
-            income={totalIncome}
-            expenses={reportedExpenses}
+            income={periodFreight}
+            expenses={periodFreight - periodMargin}
           />
         </CardBody>
       </Card>
@@ -312,23 +379,24 @@ export default async function VehicleDetailPage({
         <KpiCard
           label={
             periodContext?.isCurrent === false
-              ? "Fletes del período"
-              : "Fletes del período actual"
+              ? "Fletes confirmados"
+              : "Fletes confirmados del período"
           }
-          value={formatCurrency(totalIncome)}
+          value={formatCurrency(periodFreight)}
           icon={CircleDollarSign}
           trend="up"
         />
-        <VehicleReportedExpenses
+        <VehicleReportedExpensesKpi
           total={reportedExpenses}
-          vehicleExpenses={vehicleOnlyExpenses}
-          tripsWithExpenses={tripsWithExpenses}
+          tripCount={tripsWithExpenses.length}
+          tripTotal={tripExpenseTotal + driverSalaryTotal}
+          vehicleTotal={vehicleExpenseTotal}
         />
         <KpiCard
-          label="Utilidad"
-          value={formatCurrency(margin)}
+          label="Utilidad confirmada"
+          value={formatCurrency(periodMargin)}
           icon={TrendingUp}
-          trend={margin >= 0 ? "up" : "down"}
+          trend={periodMargin >= 0 ? "up" : "down"}
         />
         <KpiCard
           label="Viajes totales"
@@ -346,6 +414,24 @@ export default async function VehicleDetailPage({
           drivers={drivers ?? []}
           disabled={vehicle.operational_status === "in_trip"}
         />
+      ) : null}
+
+      {periodContext ? (
+        <Card>
+          <CardHeader>
+            <h2 className="font-semibold">Detalle del período</h2>
+            <p className="text-sm text-muted-foreground">
+              Mismo período de liquidación que la cuenta del conductor asignado ·{" "}
+              {getSalaryBasisLabel(orgConfig.salary_basis).toLowerCase()}
+            </p>
+          </CardHeader>
+          <CardBody>
+            <SettlementSpreadsheetTable
+              data={spreadsheetData}
+              showVehicleNetMargin
+            />
+          </CardBody>
+        </Card>
       ) : null}
 
       <Card>

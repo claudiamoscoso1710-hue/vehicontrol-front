@@ -15,7 +15,12 @@ import {
   driverFieldClassName,
   driverTextareaClassName,
 } from "@/components/driver/driver-ui";
-import { isOthersCategory } from "@/lib/expenses/category-utils";
+import { isOthersCategory, getOthersExpenseDetail } from "@/lib/expenses/category-utils";
+import {
+  getAdditionalExpenseDescription,
+  getExpenseDisplayTitle,
+  resolveExpenseScope,
+} from "@/lib/expenses/expense-scope";
 
 type Category = { id: string; name: string };
 
@@ -23,6 +28,8 @@ type Expense = {
   id: string;
   amount: number;
   notes: string | null;
+  owner_prepaid?: boolean;
+  additional_trip_expense?: boolean;
   created_at: string;
   category_id: string;
   hasEvidence?: boolean;
@@ -54,9 +61,20 @@ export function DriverExpenseList({
     <section className="space-y-3">
       <h2 className="px-1 text-sm font-semibold">Gastos de este viaje</h2>
       <ul className="space-y-2">
-        {expenses.map((expense) => (
+        {expenses.map((expense) => {
+          const categoryName = getCategoryName(expense);
+          const isAdditional = Boolean(expense.additional_trip_expense);
+          const displayTitle = isAdditional
+            ? getAdditionalExpenseDescription(expense.notes)
+            : getExpenseDisplayTitle({
+                scope: "trip",
+                categoryName,
+                notes: expense.notes,
+              });
+
+          return (
           <li key={expense.id}>
-            {editingId === expense.id ? (
+            {editingId === expense.id && !isAdditional ? (
               <DriverEditExpenseForm
                 organizationId={organizationId}
                 expense={expense}
@@ -67,17 +85,28 @@ export function DriverExpenseList({
             ) : (
               <DriverExpenseRow
                 expenseId={expense.id}
-                categoryName={getCategoryName(expense)}
+                categoryName={displayTitle}
+                categoryDetail={
+                  isAdditional
+                    ? null
+                    : getOthersExpenseDetail(categoryName, expense.notes)
+                }
                 amount={Number(expense.amount)}
                 dateLabel={new Date(expense.created_at).toLocaleDateString(
                   "es-CO"
                 )}
                 hasEvidence={expense.hasEvidence}
-                onEdit={() => setEditingId(expense.id)}
+                ownerPrepaid={Boolean(expense.owner_prepaid)}
+                expenseScope={resolveExpenseScope({
+                  tripId: "trip",
+                  additionalTripExpense: isAdditional,
+                })}
+                onEdit={isAdditional ? undefined : () => setEditingId(expense.id)}
               />
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </section>
   );

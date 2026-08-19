@@ -20,6 +20,7 @@ import {
 } from "@/components/driver/driver-ui";
 import { DriverAccountTripList } from "@/components/driver/driver-account-trip-list";
 import { DriverVehicleExpenseList } from "@/components/driver/driver-vehicle-expense-list";
+import { DriverSettlementSpreadsheet } from "@/components/owner/driver-settlement-spreadsheet";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -315,99 +316,9 @@ export function DriverAccountView({
         </div>
       </div>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium">Viajes pendientes</h2>
-        {statement.tripRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Sin viajes cerrados pendientes de liquidar.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {statement.tripRows.map((trip) => (
-              <li key={trip.tripId} className="rounded-lg border p-3 text-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">
-                      {trip.origin} → {trip.destination}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Flete {formatCurrency(trip.freight)} · Sueldo{" "}
-                      {statement.commissionPercent}%
-                    </p>
-                  </div>
-                  <span className="font-semibold text-emerald-700">
-                    {formatCurrency(trip.earnings)}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium">Gastos pendientes</h2>
-        {statement.expenseRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Sin gastos aprobados pendientes de liquidar.
-          </p>
-        ) : (
-          <>
-            <p className="text-xs text-muted-foreground">
-              Incluye gastos de viaje y del vehículo. Todos los asume la empresa
-              al liquidar.
-            </p>
-            <ul className="space-y-2">
-              {statement.expenseRows.map((expense) => (
-                <li key={expense.id} className="rounded-lg border p-3 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{expense.categoryName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {expense.scope === "vehicle"
-                          ? `Gasto del vehículo${expense.vehicleLabel ? ` · ${expense.vehicleLabel}` : ""}`
-                          : expense.tripLabel ?? "Gasto de viaje"}{" "}
-                        · {new Date(expense.createdAt).toLocaleDateString("es-CO")}
-                      </p>
-                    </div>
-                    <span className="font-semibold text-blue-700">
-                      {formatCurrency(expense.amount)}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium">Anticipos pendientes</h2>
-        {statement.advances.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Sin anticipos pendientes de liquidar.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {statement.advances.map((advance) => (
-              <li
-                key={advance.id}
-                className="flex items-center justify-between rounded-lg border p-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium">{formatCurrency(advance.amount)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {advance.status === "open" ? "Abierto" : "Liquidado"} ·{" "}
-                    {new Date(advance.createdAt).toLocaleDateString("es-CO")}
-                    {advance.deliveredByName
-                      ? ` · Entregado por ${advance.deliveredByName}`
-                      : ""}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">Detalle del período</h2>
+        <DriverSettlementSpreadsheet statement={statement} />
       </section>
 
       <SettlementHistory settlements={statement.settlements} compact />
