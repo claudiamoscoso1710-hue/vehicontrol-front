@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { PwaRegister } from "@/components/driver/pwa-register";
 import { NavigationProvider } from "@/components/shared/navigation-provider";
 import "./globals.css";
 
@@ -21,6 +22,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "SaaS Camiones",
+    statusBarStyle: "default",
+  },
+  icons: {
+    apple: [{ url: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml" }],
   },
 };
 
@@ -41,7 +46,9 @@ export default function RootLayout({
       className={`${plusJakarta.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        <NavigationProvider>{children}</NavigationProvider>
+        <PwaRegister>
+          <NavigationProvider>{children}</NavigationProvider>
+        </PwaRegister>
       </body>
     </html>
   );

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { DriverShell } from "@/components/driver/driver-shell";
-import { PwaRegister } from "@/components/driver/pwa-register";
 import { getDriverContext } from "@/lib/auth/cached-auth";
 import { loadDriverVehicleExpenseReminders } from "@/lib/reports/load-vehicle-expense-reminders";
 
@@ -39,8 +38,6 @@ export default async function DriverLayout({
     : [];
 
   return (
-    <PwaRegister>
-      <DriverShell reminders={reminders}>{children}</DriverShell>
-    </PwaRegister>
+    <DriverShell reminders={reminders}>{children}</DriverShell>
   );
 }

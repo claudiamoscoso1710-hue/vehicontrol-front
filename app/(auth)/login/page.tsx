@@ -6,6 +6,7 @@ import { signIn, type SignInState } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { inputClassName } from "@/components/ui/page-header";
 import { Card, CardBody } from "@/components/ui/card";
+import { PwaInstallButton } from "@/components/shared/pwa-install-button";
 import { useNavigationControl } from "@/components/shared/navigation-provider";
 
 export default function LoginPage() {
@@ -126,6 +127,8 @@ export default function LoginPage() {
                 {pending ? "Ingresando..." : "Entrar"}
               </Button>
             </form>
+
+            <PwaInstallButton />
           </CardBody>
         </Card>
       </div>
