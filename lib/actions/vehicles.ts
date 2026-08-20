@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit/log";
-import { callBackendJson } from "@/lib/api/backend";
+import { requireRole, RoleError } from "@/lib/permissions/checkRole";
 import { createClient } from "@/lib/supabase/server";
 
 export type VehicleActionResult =
@@ -364,17 +364,114 @@ export async function assignVehicleDriver(
   driverId: string | null
 ): Promise<VehicleActionResult> {
   try {
-    return await callBackendJson<VehicleActionResult>(
-      "/api/actions/vehicles/assign-driver",
-      { vehicleId, organizationId, driverId }
-    );
+    const supabase = await createClient();
+    const { userId } = await requireRole(supabase, organizationId, [
+      "owner",
+      "admin",
+    ]);
+
+    const { data: vehicle } = await supabase
+      .from("vehicles")
+      .select("id, operational_status, assigned_driver_id")
+      .eq("id", vehicleId)
+      .eq("organization_id", organizationId)
+      .single();
+
+    if (!vehicle) {
+      return { success: false, error: "Vehículo no encontrado." };
+    }
+
+    if (vehicle.operational_status === "in_trip") {
+      return {
+        success: false,
+        error: "No puedes cambiar el conductor mientras el vehículo está en viaje.",
+      };
+    }
+
+    if (driverId) {
+      const { data: driver } = await supabase
+        .from("drivers")
+        .select("id, full_name, status")
+        .eq("id", driverId)
+        .eq("organization_id", organizationId)
+        .single();
+
+      if (!driver || driver.status !== "active") {
+        return { success: false, error: "Conductor no válido." };
+      }
+
+      await supabase
+        .from("vehicles")
+        .update({
+          assigned_driver_id: null,
+          operational_status: "available",
+        })
+        .eq("organization_id", organizationId)
+        .eq("assigned_driver_id", driverId)
+        .neq("id", vehicleId);
+
+      const { error } = await supabase
+        .from("vehicles")
+        .update({
+          assigned_driver_id: driverId,
+          operational_status:
+            vehicle.operational_status === "available"
+              ? "assigned"
+              : vehicle.operational_status,
+        })
+        .eq("id", vehicleId)
+        .eq("organization_id", organizationId);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      await writeAuditLog(supabase, {
+        organizationId,
+        userId,
+        action: "vehicle_driver_assigned",
+        entity: "vehicles",
+        entityId: vehicleId,
+        newState: { assigned_driver_id: driverId },
+      });
+    } else {
+      const { error } = await supabase
+        .from("vehicles")
+        .update({
+          assigned_driver_id: null,
+          operational_status:
+            vehicle.operational_status === "assigned"
+              ? "available"
+              : vehicle.operational_status,
+        })
+        .eq("id", vehicleId)
+        .eq("organization_id", organizationId);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      await writeAuditLog(supabase, {
+        organizationId,
+        userId,
+        action: "vehicle_driver_unassigned",
+        entity: "vehicles",
+        entityId: vehicleId,
+        previousState: { assigned_driver_id: vehicle.assigned_driver_id },
+      });
+    }
+
+    revalidatePath("/app/vehicles");
+    revalidatePath(`/app/vehicles/${vehicleId}`);
+    revalidatePath("/app/drivers");
+    revalidatePath("/driver");
+    revalidatePath("/driver/vehicle-expenses");
+
+    return { success: true, vehicleId };
   } catch (error) {
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "No se pudo asignar el conductor.",
-    };
+    if (error instanceof RoleError) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Error al asignar el conductor." };
   }
 }
