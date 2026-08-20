@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Flag } from "lucide-react";
 import { driverFinishTrip } from "@/lib/actions/driver-trips";
+import { runDriverAction } from "@/lib/client/run-driver-action";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
 
@@ -31,21 +32,20 @@ export function DriverFinishTripButton({
     setError(null);
 
     try {
-      const result = await driverFinishTrip(tripId, organizationId);
+      const result = await runDriverAction(() =>
+        driverFinishTrip(tripId, organizationId)
+      );
 
       if (!result?.success) {
         setError(result?.error ?? "No se pudo terminar el viaje.");
-        setLoading(false);
         return;
       }
 
       setDone(true);
       router.refresh();
-    } catch {
-      setError("Error de conexión. Recarga la página e intenta de nuevo.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   if (done) {

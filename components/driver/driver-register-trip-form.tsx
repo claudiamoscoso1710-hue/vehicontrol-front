@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Truck } from "lucide-react";
+import { CheckCircle2, Play, Truck } from "lucide-react";
 import { driverRegisterTrip } from "@/lib/actions/driver-trips";
+import { runDriverAction } from "@/lib/client/run-driver-action";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { driverFieldClassName } from "@/components/driver/driver-ui";
@@ -29,23 +30,44 @@ export function DriverRegisterTripForm({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setDone(false);
 
-    const formData = new FormData(e.currentTarget);
-    const result = await driverRegisterTrip(organizationId, formData);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const result = await runDriverAction(() =>
+        driverRegisterTrip(organizationId, formData)
+      );
 
-    if (!result.success) {
-      setError(result.error);
+      if (!result.success) {
+        setError(result.error ?? "No se pudo registrar el viaje.");
+        return;
+      }
+
+      setDone(true);
+      router.refresh();
+    } finally {
       setLoading(false);
-      return;
     }
+  }
 
-    router.refresh();
-    setLoading(false);
+  if (done) {
+    return (
+      <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 px-4 py-4 text-sm text-emerald-800">
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+        <div>
+          <p className="font-semibold">Viaje iniciado</p>
+          <p className="mt-1 text-emerald-700/90">
+            Ya puedes reportar gastos del viaje.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (!assignedVehicle) {

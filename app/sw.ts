@@ -1,7 +1,6 @@
 /// <reference lib="esnext" />
 /// <reference lib="webworker" />
 
-import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { NetworkFirst, NetworkOnly, Serwist } from "serwist";
 
@@ -21,6 +20,10 @@ const serwist = new Serwist({
   runtimeCaching: [
     {
       matcher: ({ request }) => request.method !== "GET",
+      handler: new NetworkOnly(),
+    },
+    {
+      matcher: ({ url }) => url.pathname.startsWith("/_next/"),
       handler: new NetworkOnly(),
     },
     {
@@ -45,7 +48,6 @@ const serwist = new Serwist({
         networkTimeoutSeconds: 4,
       }),
     },
-    ...defaultCache,
   ],
   fallbacks: {
     entries: [

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, X } from "lucide-react";
 import { driverUpdateTrip } from "@/lib/actions/driver-trips";
+import { runDriverAction } from "@/lib/client/run-driver-action";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { driverFieldClassName } from "@/components/driver/driver-ui";
@@ -33,21 +34,21 @@ export function DriverEditTripForm({
     setLoading(true);
     setError(null);
 
-    const result = await driverUpdateTrip(
-      organizationId,
-      tripId,
-      new FormData(e.currentTarget)
-    );
+    try {
+      const result = await runDriverAction(() =>
+        driverUpdateTrip(organizationId, tripId, new FormData(e.currentTarget))
+      );
 
-    if (!result.success) {
-      setError(result.error);
+      if (!result.success) {
+        setError(result.error ?? "No se pudo actualizar el viaje.");
+        return;
+      }
+
+      setOpen(false);
+      router.refresh();
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setOpen(false);
-    router.refresh();
-    setLoading(false);
   }
 
   if (!open) {
