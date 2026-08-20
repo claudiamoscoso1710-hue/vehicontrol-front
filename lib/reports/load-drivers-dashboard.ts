@@ -9,6 +9,7 @@ import {
   parseDriverCompensationConfig,
 } from "@/lib/settings/driver-compensation";
 import { getOrganizationSetting } from "@/lib/settings/organization-settings";
+import { freightHeldFromTrip } from "@/lib/reports/driver-held-freight";
 
 export type DriverRecord = {
   id: string;
@@ -204,7 +205,7 @@ async function loadDriversDashboardFallback(
     driverIds.length
       ? supabase
           .from("trips")
-          .select("id, driver_id, freight_value")
+          .select("id, driver_id, freight_value, client_id")
           .eq("organization_id", organizationId)
           .eq("status", "closed")
           .is("settlement_id", null)
@@ -261,7 +262,10 @@ async function loadDriversDashboardFallback(
     );
   }
 
-  const tripAgg = new Map<string, { count: number; totalEarnings: number }>();
+  const tripAgg = new Map<
+    string,
+    { count: number; totalEarnings: number; totalFreightHeld: number }
+  >();
   for (const trip of trips ?? []) {
     if (!trip.driver_id) continue;
     const commission = getEffectiveCommissionPercent(
@@ -277,9 +281,17 @@ async function loadDriversDashboardFallback(
       commission,
       orgConfig.salary_basis
     );
-    const current = tripAgg.get(trip.driver_id) ?? { count: 0, totalEarnings: 0 };
+    const current = tripAgg.get(trip.driver_id) ?? {
+      count: 0,
+      totalEarnings: 0,
+      totalFreightHeld: 0,
+    };
     current.count += 1;
     current.totalEarnings += earnings;
+    current.totalFreightHeld += freightHeldFromTrip(
+      trip.client_id,
+      trip.freight_value
+    );
     tripAgg.set(trip.driver_id, current);
   }
 
@@ -296,14 +308,24 @@ async function loadDriversDashboardFallback(
 
   const periodLabel = formatPeriodRange(new Date().toISOString(), null, true);
   const entries = driverList.map((driver) => {
-    const tripsForDriver = tripAgg.get(driver.id) ?? { count: 0, totalEarnings: 0 };
+    const tripsForDriver = tripAgg.get(driver.id) ?? {
+      count: 0,
+      totalEarnings: 0,
+      totalFreightHeld: 0,
+    };
     const expensesForDriver = expenseAgg.get(driver.id) ?? { count: 0, total: 0 };
     const advancesForDriver = advanceAgg.get(driver.id) ?? { count: 0, total: 0 };
     const totalEarnings = tripsForDriver.totalEarnings;
     const netBalance =
-      totalEarnings + expensesForDriver.total - advancesForDriver.total;
+      totalEarnings +
+      expensesForDriver.total -
+      tripsForDriver.totalFreightHeld -
+      advancesForDriver.total;
     const hasPendingItems =
-      tripsForDriver.count + expensesForDriver.count + advancesForDriver.count > 0;
+      tripsForDriver.count > 0 ||
+      expensesForDriver.count > 0 ||
+      advancesForDriver.count > 0 ||
+      tripsForDriver.totalFreightHeld > 0;
 
     return {
       driver,

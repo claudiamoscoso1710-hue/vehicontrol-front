@@ -85,7 +85,13 @@ function parseHome(raw: unknown): DriverHomeData {
   const data = raw as DriverHomeData;
   return {
     driver: data.driver ?? null,
-    activeTrip: data.activeTrip ?? null,
+    activeTrip: data.activeTrip
+      ? {
+          ...data.activeTrip,
+          clientId:
+            (data.activeTrip as { clientId?: string | null }).clientId ?? null,
+        }
+      : null,
     tripExpenses: Array.isArray(data.tripExpenses) ? data.tripExpenses : [],
     openAdvanceTotal: Number(data.openAdvanceTotal ?? 0),
     categories: Array.isArray(data.categories) ? data.categories : [],
