@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
-import { PwaRegister } from "@/components/driver/pwa-register";
 import { NavigationProvider } from "@/components/shared/navigation-provider";
+import { SwScopeGuard } from "@/components/shared/sw-scope-guard";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -46,9 +46,8 @@ export default function RootLayout({
       className={`${plusJakarta.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        <PwaRegister>
-          <NavigationProvider>{children}</NavigationProvider>
-        </PwaRegister>
+        <SwScopeGuard />
+        <NavigationProvider>{children}</NavigationProvider>
       </body>
     </html>
   );

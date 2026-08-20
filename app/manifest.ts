@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Conductor",
     description: "Reporta gastos y gestiona viajes desde carretera",
     start_url: "/driver",
-    scope: "/",
+    scope: "/driver",
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     background_color: "#ffffff",

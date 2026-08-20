@@ -20,8 +20,20 @@ const serwist = new Serwist({
   navigationPreload: true,
   runtimeCaching: [
     {
+      matcher: ({ request }) => request.method !== "GET",
+      handler: new NetworkOnly(),
+    },
+    {
       matcher: ({ url }) =>
         url.hostname.includes("supabase.co") || url.pathname.startsWith("/api/"),
+      handler: new NetworkOnly(),
+    },
+    {
+      matcher: ({ url }) =>
+        url.pathname.startsWith("/app") ||
+        url.pathname.startsWith("/admin") ||
+        url.pathname.startsWith("/login") ||
+        url.pathname.startsWith("/auth"),
       handler: new NetworkOnly(),
     },
     {
