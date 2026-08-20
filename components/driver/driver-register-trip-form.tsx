@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Play, Truck } from "lucide-react";
 import { driverRegisterTrip } from "@/lib/actions/driver-trips";
 import { runDriverAction } from "@/lib/client/run-driver-action";
+import { DRIVER_HELD_FREIGHT_REGISTER_HINT } from "@/lib/reports/driver-held-freight";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { driverFieldClassName } from "@/components/driver/driver-ui";
@@ -31,6 +32,7 @@ export function DriverRegisterTripForm({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [clientId, setClientId] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -144,7 +146,13 @@ export function DriverRegisterTripForm({
             Cliente{" "}
             <span className="font-normal text-muted-foreground">(opcional)</span>
           </label>
-          <select id="clientId" name="clientId" className={driverFieldClassName()}>
+          <select
+            id="clientId"
+            name="clientId"
+            className={driverFieldClassName()}
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+          >
             <option value="">Sin cliente</option>
             {clients.map((client) => (
               <option key={client.id} value={client.id}>
@@ -154,6 +162,13 @@ export function DriverRegisterTripForm({
           </select>
         </div>
       )}
+
+      {(clients.length === 0 || (clients.length > 0 && !clientId)) ? (
+        <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-950">
+          <p className="font-semibold">Flete en tu poder</p>
+          <p className="mt-1 text-orange-900/90">{DRIVER_HELD_FREIGHT_REGISTER_HINT}</p>
+        </div>
+      ) : null}
 
       {error && (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">

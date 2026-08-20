@@ -100,7 +100,7 @@ export const loadDriverAccountStatement = cache(
 
     let tripsQuery = supabase
       .from("trips")
-      .select("id, origin, destination, closed_at, freight_value")
+      .select("id, origin, destination, closed_at, freight_value, client_id")
       .eq("organization_id", organizationId)
       .eq("driver_id", driverId)
       .eq("status", "closed");

@@ -18,6 +18,8 @@ export type SettlementSpreadsheetTripRow = {
   /** Gastos que restan utilidad (excluye anticipados). */
   tripExpensesForProfit: number;
   driverSalary: number;
+  /** Flete cobrado por el conductor (viaje sin cliente), a entregar al dueño. */
+  freightHeld: number;
   expenseItems: SettlementSpreadsheetExpenseItem[];
   /** Viaje en curso: no suma al total confirmado ni a la utilidad. */
   isPending?: boolean;
@@ -53,6 +55,8 @@ export type SettlementSpreadsheetData = {
     driverSalary: number;
     vehicleExpenses: number;
     advances: number;
+    /** Flete en mano del conductor (viajes sin cliente). */
+    freightHeld: number;
     /** Fletes − gastos viaje − sueldo − gastos carro (solo confirmado). */
     netMargin: number;
     /** Viajes en curso — informativo, no entra a utilidad. */

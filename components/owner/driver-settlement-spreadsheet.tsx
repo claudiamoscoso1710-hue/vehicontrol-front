@@ -22,6 +22,7 @@ function fromDriverStatement(
       tripExpenses: trip.expenses,
       tripExpensesForProfit: trip.expenses,
       driverSalary: trip.earnings,
+      freightHeld: trip.freightHeld,
       isPending: false,
       expenseItems: trip.expenseItems.map((expense) => ({
         id: expense.id,
@@ -54,6 +55,7 @@ function fromDriverStatement(
       driverSalary: statement.totalEarnings,
       vehicleExpenses: statement.totalVehicleExpenses,
       advances: statement.totalAdvances,
+      freightHeld: statement.totalFreightHeld,
       netMargin:
         statement.tripRows.reduce((sum, row) => sum + row.freight, 0) -
         statement.totalTripExpenses -
@@ -63,7 +65,7 @@ function fromDriverStatement(
       pendingTripExpenses: 0,
       pendingDriverSalary: 0,
     },
-    footerNote: `Toca la suma de gastos de un viaje para ver el detalle. Base sueldo: ${statement.salaryBasisLabel.toLowerCase()} (${statement.commissionPercent}%).`,
+    footerNote: `Toca la suma de gastos de un viaje para ver el detalle. Base sueldo: ${statement.salaryBasisLabel.toLowerCase()} (${statement.commissionPercent}%). El flete en mano aplica a viajes sin cliente (cobrado por el conductor).`,
     emptyMessage: "Sin movimientos pendientes en este período.",
   };
 }

@@ -50,7 +50,7 @@ export async function createDriverSettlement(
 
     const { data: trips } = await supabase
       .from("trips")
-      .select("id, origin, destination, closed_at, freight_value")
+      .select("id, origin, destination, closed_at, freight_value, client_id")
       .eq("organization_id", organizationId)
       .eq("driver_id", driverId)
       .eq("status", "closed")
@@ -242,6 +242,7 @@ export async function createDriverSettlement(
         vehicle_expense_count: vehicleExpenseCount,
         owner_assumed_expenses: preview.ownerAssumedExpenses,
         advance_count: advanceIds.length,
+        freight_held: preview.totalFreightHeld,
       },
     });
 

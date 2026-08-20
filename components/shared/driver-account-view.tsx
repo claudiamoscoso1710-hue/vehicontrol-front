@@ -13,6 +13,7 @@ import {
 import { formatCurrency } from "@/lib/format";
 import type { DriverAccountStatement } from "@/lib/reports/driver-account-statement";
 import { getSettlementPaymentLabel } from "@/lib/reports/driver-account-statement";
+import { DRIVER_HELD_FREIGHT_SHORT } from "@/lib/reports/driver-held-freight";
 import {
   DriverPageContainer,
   DriverPageHeader,
@@ -107,8 +108,8 @@ export function DriverAccountView({
     ? isPositive
       ? "La empresa te debe este monto por sueldo y gastos sin anticipos."
       : isNegative
-        ? "Debes devolver el restante por anticipos recibidos."
-        : "Tu sueldo, gastos y anticipos están equilibrados."
+        ? "Debes entregar flete en mano y/o anticipos, menos sueldo y gastos reembolsables."
+        : "Tu sueldo, gastos, flete en mano y anticipos están equilibrados."
     : "No tienes movimientos pendientes de liquidar.";
 
   if (variant === "driver") {
@@ -139,7 +140,7 @@ export function DriverAccountView({
             <p className="mt-1 text-xs text-muted-foreground">{payment.action}</p>
           ) : null}
 
-          <div className="mt-5 grid grid-cols-3 gap-2">
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-2xl bg-white/70 px-3 py-3">
               <div className="flex items-center gap-1.5 text-emerald-700">
                 <TrendingUp className="h-4 w-4" />
@@ -163,6 +164,17 @@ export function DriverAccountView({
               </p>
             </div>
             <div className="rounded-2xl bg-white/70 px-3 py-3">
+              <div className="flex items-center gap-1.5 text-orange-700">
+                <Banknote className="h-4 w-4" />
+                <span className="text-[10px] font-bold uppercase tracking-wide">
+                  {DRIVER_HELD_FREIGHT_SHORT}
+                </span>
+              </div>
+              <p className="mt-1 text-sm font-bold">
+                {formatCurrency(statement.totalFreightHeld)}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/70 px-3 py-3">
               <div className="flex items-center gap-1.5 text-amber-700">
                 <TrendingDown className="h-4 w-4" />
                 <span className="text-[10px] font-bold uppercase tracking-wide">
@@ -183,9 +195,9 @@ export function DriverAccountView({
               Sueldo: {statement.commissionPercent}% del flete
             </p>
             <p className="text-muted-foreground">
-              {statement.driverSalaryLabel}. Los gastos de viaje y del vehículo se
-              reembolsan aparte y los asume la empresa. Al liquidar, el dueño
-              cierra el período y la cuenta pendiente queda en $0.
+              {statement.driverSalaryLabel}. Los gastos se reembolsan aparte. Si
+              no hay cliente, el flete lo tienes tú y debes entregarlo al dueño
+              al liquidar (se descuenta de tu cuenta, aparte de los anticipos).
             </p>
           </div>
         </div>
@@ -279,13 +291,13 @@ export function DriverAccountView({
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
         <p>
           <strong>Sueldo:</strong> {statement.commissionPercent}% del flete ·{" "}
-          {statement.driverSalaryLabel.toLowerCase()}. Los gastos de viaje y del
-          vehículo se reembolsan aparte y los asume la empresa. Al liquidar, los
-          movimientos pendientes se cierran y el saldo queda en $0.
+          {statement.driverSalaryLabel.toLowerCase()}. Los gastos se reembolsan
+          aparte. Sin cliente, el flete lo tiene el conductor y se descuenta como
+          flete en mano al liquidar.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-xl border p-4">
           <p className="text-sm text-muted-foreground">Sueldo ganado</p>
           <p className="mt-1 text-2xl font-bold text-emerald-700">
@@ -300,6 +312,12 @@ export function DriverAccountView({
           <p className="mt-1 text-xs text-muted-foreground">
             Viaje {formatCurrency(statement.totalTripExpenses)} · Vehículo{" "}
             {formatCurrency(statement.totalVehicleExpenses)}
+          </p>
+        </div>
+        <div className="rounded-xl border p-4">
+          <p className="text-sm text-muted-foreground">{DRIVER_HELD_FREIGHT_SHORT}</p>
+          <p className="mt-1 text-2xl font-bold text-orange-700">
+            {formatCurrency(statement.totalFreightHeld)}
           </p>
         </div>
         <div className="rounded-xl border p-4">

@@ -10,6 +10,7 @@ import {
   getSettlementPaymentLabel,
   type DriverAccountStatement,
 } from "@/lib/reports/driver-account-statement";
+import { DRIVER_HELD_FREIGHT_SHORT } from "@/lib/reports/driver-held-freight";
 
 type Props = {
   organizationId: string;
@@ -84,13 +85,16 @@ export function DriverSettlementPanel({
             {statement.tripExpenseRows.length === 1 ? "" : "s"} de viaje,{" "}
             {statement.vehicleExpenseRows.length} gasto
             {statement.vehicleExpenseRows.length === 1 ? "" : "s"} del vehículo,{" "}
+            {statement.totalFreightHeld > 0
+              ? `${formatCurrency(statement.totalFreightHeld)} flete en mano, `
+              : ""}
             {statement.advances.length} anticipo
             {statement.advances.length === 1 ? "" : "s"}.
           </p>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-lg bg-muted/40 p-3 text-sm">
           <p className="text-muted-foreground">Sueldo (% del flete)</p>
           <p className="mt-1 font-semibold text-emerald-700">
@@ -105,6 +109,12 @@ export function DriverSettlementPanel({
           <p className="mt-1 text-xs text-muted-foreground">
             Viaje {formatCurrency(statement.totalTripExpenses)} · Vehículo{" "}
             {formatCurrency(statement.totalVehicleExpenses)} · Asume la empresa
+          </p>
+        </div>
+        <div className="rounded-lg bg-muted/40 p-3 text-sm">
+          <p className="text-muted-foreground">{DRIVER_HELD_FREIGHT_SHORT}</p>
+          <p className="mt-1 font-semibold text-orange-700">
+            −{formatCurrency(statement.totalFreightHeld)}
           </p>
         </div>
         <div className="rounded-lg bg-muted/40 p-3 text-sm">

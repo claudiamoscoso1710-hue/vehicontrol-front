@@ -59,6 +59,7 @@ export function DriverAccountTripList({
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Flete {formatCurrency(trip.freight)} · Sueldo {commissionPercent}%
+                  {trip.driverHoldsFreight ? " · Flete en mano" : ""}
                   {hasExpenses
                     ? ` · ${trip.expenseItems.length} gasto${trip.expenseItems.length === 1 ? "" : "s"}`
                     : ""}

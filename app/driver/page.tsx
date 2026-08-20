@@ -8,6 +8,8 @@ import { DriverExpenseList } from "@/components/driver/driver-expense-list";
 import { DriverBalanceCard } from "@/components/driver/driver-balance-card";
 import { DriverHomeSnapshot } from "@/components/driver/driver-home-snapshot";
 import { formatCurrency } from "@/lib/format";
+import { DRIVER_HELD_FREIGHT_ACTIVE_HINT } from "@/lib/reports/driver-held-freight";
+import { driverHoldsFreight } from "@/lib/reports/driver-held-freight";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { loadDriverHome } from "@/lib/reports/load-driver-home";
 import {
@@ -82,6 +84,15 @@ export default async function DriverPage() {
                     destination={currentTrip.destination}
                     plate={currentTrip.vehiclePlate ?? undefined}
                   />
+
+                  {driverHoldsFreight(currentTrip.clientId) ? (
+                    <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-950">
+                      <p className="font-semibold">Flete en tu poder</p>
+                      <p className="mt-1 text-orange-900/90">
+                        {DRIVER_HELD_FREIGHT_ACTIVE_HINT}
+                      </p>
+                    </div>
+                  ) : null}
 
                   <div className="grid grid-cols-3 gap-2">
                     <DriverStatChip

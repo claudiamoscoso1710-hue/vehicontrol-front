@@ -64,6 +64,7 @@ export function buildVehicleSettlementSpreadsheet(params: {
       tripExpenses,
       tripExpensesForProfit,
       driverSalary: trip.driverSalary,
+      freightHeld: 0,
       isPending,
       expenseItems: trip.expenses.map((expense) => ({
         id: expense.id,
@@ -135,6 +136,7 @@ export function buildVehicleSettlementSpreadsheet(params: {
       driverSalary: totalDriverSalary,
       vehicleExpenses: totalVehicleExpenses,
       advances: totalAdvances,
+      freightHeld: 0,
       netMargin,
       pendingFreight,
       pendingTripExpenses,

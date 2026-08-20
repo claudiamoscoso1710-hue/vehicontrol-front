@@ -18,6 +18,7 @@ import {
 } from "@/lib/settings/driver-compensation";
 import { getOrganizationSetting } from "@/lib/settings/organization-settings";
 import { formatCurrency } from "@/lib/format";
+import { driverHoldsFreight, DRIVER_HELD_FREIGHT_OWNER_HINT } from "@/lib/reports/driver-held-freight";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardBody } from "@/components/ui/card";
 
@@ -172,9 +173,14 @@ export default async function TripDetailPage({ params }: Props) {
               <StatusBadge status={trip.status} />
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              Cliente: {client?.name ?? "N/A"} · Flete{" "}
+              Cliente: {client?.name ?? "Sin cliente (flete en mano del conductor)"} · Flete{" "}
               {formatCurrency(freightValue)}
             </p>
+            {driverHoldsFreight(trip.client_id) ? (
+              <p className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-950">
+                {DRIVER_HELD_FREIGHT_OWNER_HINT}
+              </p>
+            ) : null}
             {canManageTrips && trip.driver_id && trip.vehicle_id ? (
               <div className="mt-4">
                 <OwnerEditTripPanel

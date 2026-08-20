@@ -7,6 +7,10 @@ import {
   type SalaryBasis,
 } from "@/lib/settings/driver-compensation";
 import type { SettlementPeriodOption } from "@/lib/reports/settlement-period";
+import {
+  driverHoldsFreight,
+  freightHeldFromTrip,
+} from "@/lib/reports/driver-held-freight";
 
 export type TripEarningRow = {
   tripId: string;
@@ -17,6 +21,8 @@ export type TripEarningRow = {
   expenses: number;
   earnings: number;
   expenseItems: ExpenseRow[];
+  driverHoldsFreight: boolean;
+  freightHeld: number;
 };
 
 export type AdvanceRow = {
@@ -79,6 +85,7 @@ export type DriverAccountStatement = {
   ownerAssumedExpenses: number;
   advances: AdvanceRow[];
   totalAdvances: number;
+  totalFreightHeld: number;
   netBalance: number;
   hasPendingItems: boolean;
   settlements: SettlementHistoryRow[];
@@ -90,6 +97,7 @@ type TripInput = {
   destination: string;
   closed_at: string | null;
   freight_value: number | null;
+  client_id?: string | null;
 };
 
 type TripExpenseInput = {
@@ -226,6 +234,8 @@ export function buildDriverAccountStatement(params: {
       expenses,
       earnings,
       expenseItems: expensesByTripId.get(trip.id) ?? [],
+      driverHoldsFreight: driverHoldsFreight(trip.client_id),
+      freightHeld: freightHeldFromTrip(trip.client_id, freight),
     };
   });
 
@@ -251,9 +261,11 @@ export function buildDriverAccountStatement(params: {
   }));
 
   const totalAdvances = advances.reduce((sum, row) => sum + row.amount, 0);
+  const totalFreightHeld = tripRows.reduce((sum, row) => sum + row.freightHeld, 0);
 
-  // Sueldo + gastos reembolsables − anticipos
-  const netBalance = totalEarnings + reimbursableExpenses - totalAdvances;
+  // Sueldo + gastos reembolsables − flete en mano (sin cliente) − anticipos
+  const netBalance =
+    totalEarnings + reimbursableExpenses - totalFreightHeld - totalAdvances;
 
   const settlements: SettlementHistoryRow[] = (params.settlements ?? []).map(
     (row) => ({
@@ -295,10 +307,14 @@ export function buildDriverAccountStatement(params: {
     ownerAssumedExpenses,
     advances,
     totalAdvances,
+    totalFreightHeld,
     netBalance,
     hasPendingItems:
       params.isCurrentPeriod &&
-      (tripRows.length > 0 || expenseRows.length > 0 || advances.length > 0),
+      (tripRows.length > 0 ||
+        expenseRows.length > 0 ||
+        advances.length > 0 ||
+        totalFreightHeld > 0),
     settlements,
   };
 }
@@ -326,9 +342,9 @@ export function getSettlementPaymentLabel(netBalance: number): {
   }
   if (netBalance < 0) {
     return {
-      action: "Devolución del conductor",
+      action: "Entrega al dueño",
       description:
-        "El conductor entrega el saldo restante por anticipos recibidos.",
+        "El conductor entrega el saldo: flete cobrado en efectivo (viajes sin cliente), anticipos recibidos, menos sueldo y gastos reembolsables.",
     };
   }
   return {

@@ -24,7 +24,7 @@ function MoneyCell({
   className,
 }: {
   value: number;
-  tone?: "neutral" | "freight" | "expense" | "earning" | "vehicle" | "advance";
+  tone?: "neutral" | "freight" | "expense" | "earning" | "vehicle" | "advance" | "freightHeld";
   className?: string;
 }) {
   if (value === 0) {
@@ -51,7 +51,9 @@ function MoneyCell({
             ? "text-violet-700"
             : tone === "advance"
               ? "text-amber-700"
-              : "text-foreground";
+              : tone === "freightHeld"
+                ? "text-orange-700"
+                : "text-foreground";
 
   return (
     <td
@@ -108,7 +110,7 @@ export function SettlementSpreadsheetTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[920px] border-collapse text-sm">
+        <table className="w-full min-w-[1040px] border-collapse text-sm">
           <thead>
             <tr className="border-b bg-muted/40">
               <th className={thClass}>Viaje / concepto</th>
@@ -116,6 +118,7 @@ export function SettlementSpreadsheetTable({
               <th className={thRight}>Gastos viaje</th>
               <th className={thRight}>Sueldo conductor</th>
               <th className={thRight}>Gastos carro</th>
+              <th className={thRight}>Flete en mano</th>
               <th className={thRight}>Anticipos</th>
             </tr>
           </thead>
@@ -145,6 +148,11 @@ export function SettlementSpreadsheetTable({
                         {trip.isPending ? (
                           <p className="mt-0.5 text-xs font-medium text-amber-800">
                             Pendiente — no suma a utilidad hasta cerrar el viaje
+                          </p>
+                        ) : null}
+                        {!trip.isPending && trip.freightHeld > 0 ? (
+                          <p className="mt-0.5 text-xs font-medium text-orange-800">
+                            Sin cliente — flete en mano del conductor
                           </p>
                         ) : null}
                       </div>
@@ -190,6 +198,10 @@ export function SettlementSpreadsheetTable({
                       className={trip.isPending ? "text-muted-foreground" : undefined}
                     />
                     <MoneyCell value={0} />
+                    <MoneyCell
+                      value={trip.freightHeld}
+                      tone="freightHeld"
+                    />
                     <MoneyCell value={0} />
                   </tr>
 
@@ -245,7 +257,7 @@ export function SettlementSpreadsheetTable({
                             <td className="px-3 py-2 text-right tabular-nums text-sm text-blue-700">
                               {formatCurrency(expense.amount)}
                             </td>
-                            <td colSpan={3} />
+                            <td colSpan={4} />
                           </tr>
                         );
                       })
@@ -253,7 +265,7 @@ export function SettlementSpreadsheetTable({
 
                   {isOpen && !hasExpenses ? (
                     <tr className="border-b border-border/40 bg-muted/10">
-                      <td colSpan={6} className="px-3 py-2 pl-8 text-xs text-muted-foreground">
+                      <td colSpan={7} className="px-3 py-2 pl-8 text-xs text-muted-foreground">
                         Sin gastos en este viaje.
                       </td>
                     </tr>
@@ -287,6 +299,7 @@ export function SettlementSpreadsheetTable({
                   <MoneyCell value={0} />
                   <MoneyCell value={expense.amount} tone="vehicle" />
                   <MoneyCell value={0} />
+                  <MoneyCell value={0} />
                 </tr>
               );
             })}
@@ -311,6 +324,8 @@ export function SettlementSpreadsheetTable({
                 <MoneyCell value={0} />
                 <MoneyCell value={0} />
                 <MoneyCell value={0} />
+                <MoneyCell value={0} />
+                <MoneyCell value={0} />
                 <MoneyCell value={advance.amount} tone="advance" />
               </tr>
             ))}
@@ -329,6 +344,9 @@ export function SettlementSpreadsheetTable({
               </td>
               <td className="px-3 py-3 text-right tabular-nums text-violet-700">
                 {formatCurrency(data.totals.vehicleExpenses)}
+              </td>
+              <td className="px-3 py-3 text-right tabular-nums text-orange-700">
+                {formatCurrency(data.totals.freightHeld)}
               </td>
               <td className="px-3 py-3 text-right tabular-nums text-amber-700">
                 {formatCurrency(data.totals.advances)}
@@ -356,6 +374,9 @@ export function SettlementSpreadsheetTable({
                 <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                   —
                 </td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                  —
+                </td>
               </tr>
             ) : null}
             {showVehicleNetMargin ? (
@@ -374,7 +395,7 @@ export function SettlementSpreadsheetTable({
                     {marginPercent !== null ? ` · ${marginPercent}% sobre fletes` : ""}
                   </p>
                 </td>
-                <td colSpan={5} className="px-3 py-3 text-right">
+                <td colSpan={6} className="px-3 py-3 text-right">
                   <p
                     className={cn(
                       "text-lg tabular-nums",

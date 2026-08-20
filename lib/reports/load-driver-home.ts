@@ -7,6 +7,7 @@ import {
   getEffectiveCommissionPercent,
   parseDriverCompensationConfig,
 } from "@/lib/settings/driver-compensation";
+import { freightHeldFromTrip } from "@/lib/reports/driver-held-freight";
 import { getOrganizationSetting } from "@/lib/settings/organization-settings";
 
 export type DriverHomeTrip = {
@@ -16,6 +17,7 @@ export type DriverHomeTrip = {
   status: string;
   freightValue: number;
   vehiclePlate: string | null;
+  clientId: string | null;
 };
 
 export type DriverHomeExpense = {
@@ -159,7 +161,7 @@ async function loadDriverHomeFallback(
   ] = await Promise.all([
     supabase
       .from("trips")
-      .select("id, origin, destination, status, freight_value, vehicles(plate)")
+      .select("id, origin, destination, status, freight_value, client_id, vehicles(plate)")
       .eq("driver_id", driverProfile.id)
       .eq("status", "in_progress")
       .maybeSingle(),
@@ -189,7 +191,7 @@ async function loadDriverHomeFallback(
       .is("settlement_id", null),
     supabase
       .from("trips")
-      .select("id, freight_value")
+      .select("id, freight_value, client_id")
       .eq("driver_id", driverProfile.id)
       .eq("organization_id", orgId)
       .eq("status", "closed")
@@ -275,6 +277,10 @@ async function loadDriverHomeFallback(
     (sum, row) => sum + Number(row.amount),
     0
   );
+  const totalFreightHeld = (closedTrips ?? []).reduce(
+    (sum, trip) => sum + freightHeldFromTrip(trip.client_id, trip.freight_value),
+    0
+  );
   const totalAdvances = (openAdvances ?? []).reduce(
     (sum, row) => sum + Number(row.amount),
     0
@@ -299,6 +305,7 @@ async function loadDriverHomeFallback(
           status: activeTrip.status,
           freightValue: Number(activeTrip.freight_value ?? 0),
           vehiclePlate: (vehicle as { plate: string } | null)?.plate ?? null,
+          clientId: activeTrip.client_id ?? null,
         }
       : null,
     tripExpenses: (tripExpenses ?? []).map((expense) => {
@@ -333,7 +340,7 @@ async function loadDriverHomeFallback(
       totalEarnings,
       totalExpenses,
       totalAdvances,
-      netBalance: totalEarnings + totalExpenses - totalAdvances,
+      netBalance: totalEarnings + totalExpenses - totalFreightHeld - totalAdvances,
       hasPendingItems:
         (closedTrips ?? []).length > 0 ||
         (pendingExpenses ?? []).length > 0 ||
