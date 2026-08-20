@@ -6,7 +6,6 @@ import { TripFinancialSummary } from "@/components/owner/trip-financial-summary"
 import { OwnerEditTripPanel } from "@/components/owner/owner-edit-trip-panel";
 import { getOwnerContext } from "@/lib/auth/cached-auth";
 import { getOrgCapabilities } from "@/lib/permissions/capabilities";
-import { filterCategoriesByScope } from "@/lib/expenses/expense-scope";
 import {
   calculateOwnerTripDriverSalary,
   resolveTripCommissionPercent,
@@ -63,7 +62,7 @@ export default async function TripDetailPage({ params }: Props) {
     supabase
       .from("expenses")
       .select(
-        "id, amount, status, notes, owner_prepaid, additional_trip_expense, category_id, settlement_id, created_at, expense_categories(name), drivers(full_name)"
+        "id, amount, status, notes, owner_prepaid, additional_trip_expense, category_id, settlement_id, created_at, trip_id, expense_categories(name), drivers(full_name)"
       )
       .eq("trip_id", id)
       .eq("organization_id", org.organizationId)
@@ -102,10 +101,46 @@ export default async function TripDetailPage({ params }: Props) {
 
   if (!trip) notFound();
 
-  const expenseTotal =
-    expenses
-      ?.filter((e) => e.status === "approved")
+  let vehicleExpensesDuringTrip: NonNullable<typeof expenses> = [];
+  if (trip.vehicle_id && trip.driver_id && trip.started_at) {
+    let vehicleQuery = supabase
+      .from("expenses")
+      .select(
+        "id, amount, status, notes, owner_prepaid, additional_trip_expense, category_id, settlement_id, created_at, trip_id, expense_categories(name), drivers(full_name)"
+      )
+      .is("trip_id", null)
+      .eq("vehicle_id", trip.vehicle_id)
+      .eq("driver_id", trip.driver_id)
+      .eq("organization_id", org.organizationId)
+      .gte("created_at", trip.started_at);
+
+    if (trip.closed_at) {
+      vehicleQuery = vehicleQuery.lte("created_at", trip.closed_at);
+    }
+
+    const { data: vehicleRows } = await vehicleQuery.order("created_at", {
+      ascending: false,
+    });
+    vehicleExpensesDuringTrip = vehicleRows ?? [];
+  }
+
+  const mergedExpenses = [...(expenses ?? []), ...vehicleExpensesDuringTrip].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  const reportedExpenseTotal =
+    mergedExpenses
+      .filter((e) => e.status === "approved")
       .reduce((sum, e) => sum + Number(e.amount), 0) ?? 0;
+  const salaryExpenseTotal = mergedExpenses
+    .filter(
+      (e) =>
+        e.status === "approved" &&
+        e.trip_id === id &&
+        !e.additional_trip_expense
+    )
+    .reduce((sum, e) => sum + Number(e.amount), 0);
   const freightValue = Number(trip.freight_value ?? 0);
   const tripDriver = Array.isArray(trip.drivers) ? trip.drivers[0] : trip.drivers;
   const commissionPercent = resolveTripCommissionPercent(
@@ -114,31 +149,34 @@ export default async function TripDetailPage({ params }: Props) {
   );
   const driverSalary = calculateOwnerTripDriverSalary(
     freightValue,
-    expenseTotal,
+    salaryExpenseTotal,
     commissionPercent,
     orgConfig.salary_basis
   );
 
   const { data: tripExpenseEvidences } =
-    (expenses ?? []).length > 0
+    mergedExpenses.length > 0
       ? await supabase
           .from("expense_evidences")
           .select("expense_id")
           .eq("organization_id", org.organizationId)
-          .in("expense_id", (expenses ?? []).map((e) => e.id))
+          .in("expense_id", mergedExpenses.map((e) => e.id))
       : { data: [] as { expense_id: string }[] };
 
   const evidenceSet = new Set(
     (tripExpenseEvidences ?? []).map((e) => e.expense_id)
   );
 
-  const expensesWithEvidence = (expenses ?? []).map((e) => ({
+  const expensesWithEvidence = mergedExpenses.map((e) => ({
     ...e,
-    trip_id: id,
     hasEvidence: evidenceSet.has(e.id),
   }));
 
-  const tripCategories = filterCategoriesByScope(categories ?? [], "trip");
+  const allCategories = (categories ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    scope: (c.scope === "vehicle" ? "vehicle" : "trip") as "trip" | "vehicle",
+  }));
   const canManageExpenses = Boolean(caps?.canManageExpenses);
   const canManageTrips = Boolean(caps?.canManageTrips);
 
@@ -215,7 +253,7 @@ export default async function TripDetailPage({ params }: Props) {
 
       <TripFinancialSummary
         freightValue={freightValue}
-        reportedExpenseTotal={expenseTotal}
+        reportedExpenseTotal={reportedExpenseTotal}
         driverSalary={driverSalary}
         commissionPercent={commissionPercent}
         vehiclePlate={vehicle?.plate}
@@ -238,11 +276,9 @@ export default async function TripDetailPage({ params }: Props) {
           emptyMessage="Sin otros gastos reportados en este viaje."
           canManageExpenses={canManageExpenses}
           organizationId={org.organizationId}
-          categories={tripCategories.map((c) => ({
-            id: c.id,
-            name: c.name,
-            scope: "trip" as const,
-          }))}
+          tripId={trip.id}
+          tripSettled={Boolean(trip.settlement_id)}
+          categories={allCategories}
         />
       </section>
     </main>

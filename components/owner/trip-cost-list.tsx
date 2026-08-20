@@ -2,13 +2,14 @@
 
 import { Wallet } from "lucide-react";
 import { ExpenseReviewList } from "@/components/owner/expense-review-list";
+import { OwnerCreateTripExpenseForm } from "@/components/owner/owner-create-trip-expense-form";
 import {
   OwnerManageExpenseList,
   type OwnerManageExpense,
 } from "@/components/owner/owner-manage-expense-list";
 import { formatCurrency } from "@/lib/format";
 
-type Category = { id: string; name: string };
+type Category = { id: string; name: string; scope?: "trip" | "vehicle" };
 
 type Expense = OwnerManageExpense;
 
@@ -21,6 +22,8 @@ type Props = {
   emptyMessage?: string;
   canManageExpenses?: boolean;
   organizationId?: string;
+  tripId?: string;
+  tripSettled?: boolean;
   categories?: Category[];
 };
 
@@ -33,6 +36,8 @@ export function TripCostList({
   emptyMessage = "Sin otros gastos en este viaje.",
   canManageExpenses = false,
   organizationId,
+  tripId,
+  tripSettled = false,
   categories = [],
 }: Props) {
   const hasSalary = driverSalary > 0;
@@ -42,8 +47,23 @@ export function TripCostList({
     return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
   }
 
+  const canAddExpenses =
+    canManageExpenses && organizationId && tripId && !tripSettled;
+
+  if (!hasSalary && !hasExpenses && !canAddExpenses) {
+    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
+  }
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {canAddExpenses ? (
+        <OwnerCreateTripExpenseForm
+          organizationId={organizationId}
+          tripId={tripId}
+          categories={categories}
+        />
+      ) : null}
+
       {hasSalary ? (
         <div className="overflow-hidden rounded-xl border border-violet-200/80 bg-violet-50/50">
           <div className="flex items-center gap-3 p-3">

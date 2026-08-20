@@ -791,6 +791,195 @@ function revalidateOwnerExpensePaths(params: {
   revalidatePath("/driver");
 }
 
+type OwnerTripExpenseScope = "trip" | "vehicle" | "additional";
+
+function parseExpenseScope(formData: FormData): OwnerTripExpenseScope {
+  const value = String(formData.get("expenseScope") ?? "trip");
+  if (value === "vehicle" || value === "additional") return value;
+  return "trip";
+}
+
+export async function ownerCreateTripExpense(
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    const organizationId = String(formData.get("organizationId") ?? "");
+    const tripId = String(formData.get("tripId") ?? "");
+    const categoryId = String(formData.get("categoryId") ?? "");
+    const amount = parseMoneyValue(formData.get("amount"));
+    const notes = String(formData.get("notes") ?? "").trim();
+    const customDescription = String(formData.get("customDescription") ?? "").trim();
+    const evidence = formData.get("evidence");
+    const expenseScope = parseExpenseScope(formData);
+    const ownerPrepaid =
+      expenseScope !== "vehicle" && parseOwnerPrepaid(formData);
+    const additionalTripExpense = expenseScope === "additional";
+
+    if (!organizationId || !tripId || !amount || amount <= 0) {
+      return { success: false, error: "Completa todos los campos obligatorios." };
+    }
+
+    let resolvedCategoryId: string | null = categoryId || null;
+    let expenseNotes: string | null;
+
+    if (additionalTripExpense) {
+      if (!customDescription) {
+        return {
+          success: false,
+          error: "Describe de qué es el gasto adicional.",
+        };
+      }
+      resolvedCategoryId = null;
+      expenseNotes = buildExpenseNotes("Otros", customDescription, notes);
+    } else {
+      if (!categoryId) {
+        return { success: false, error: "Selecciona una categoría." };
+      }
+
+      const categoryName = await resolveCategoryName(
+        supabase,
+        organizationId,
+        categoryId
+      );
+      if (!categoryName) {
+        return { success: false, error: "Categoría no válida." };
+      }
+      if (isOthersCategory(categoryName) && !customDescription) {
+        return {
+          success: false,
+          error: "Describe de qué es el gasto cuando eliges Otros.",
+        };
+      }
+
+      expenseNotes = buildExpenseNotes(categoryName, customDescription, notes);
+    }
+
+    const evidenceResult = await getValidatedEvidence(evidence);
+    if (!evidenceResult.ok) {
+      return { success: false, error: evidenceResult.error };
+    }
+
+    const { userId } = await requireRole(supabase, organizationId, [
+      "owner",
+      "admin",
+      "accountant",
+    ]);
+
+    const { data: trip } = await supabase
+      .from("trips")
+      .select("id, vehicle_id, driver_id, status, settlement_id")
+      .eq("id", tripId)
+      .eq("organization_id", organizationId)
+      .single();
+
+    if (!trip) {
+      return { success: false, error: "Viaje no encontrado." };
+    }
+
+    if (trip.settlement_id) {
+      return {
+        success: false,
+        error: "No puedes agregar gastos a un viaje ya liquidado.",
+      };
+    }
+
+    if (trip.status !== "in_progress" && trip.status !== "closed") {
+      return {
+        success: false,
+        error: "Solo puedes agregar gastos a viajes en curso o cerrados.",
+      };
+    }
+
+    if (!trip.vehicle_id || !trip.driver_id) {
+      return {
+        success: false,
+        error: "El viaje debe tener vehículo y conductor asignados.",
+      };
+    }
+
+    const { data: expense, error: expenseError } = await insertExpenseRow(supabase, {
+      organization_id: organizationId,
+      trip_id: expenseScope === "vehicle" ? null : tripId,
+      vehicle_id: trip.vehicle_id,
+      driver_id: trip.driver_id,
+      category_id: resolvedCategoryId,
+      amount,
+      status: "approved",
+      notes: expenseNotes,
+      owner_prepaid: ownerPrepaid,
+      additional_trip_expense: additionalTripExpense,
+    });
+
+    if (expenseError || !expense) {
+      return {
+        success: false,
+        error: expenseError?.message ?? "No se pudo crear el gasto.",
+      };
+    }
+
+    if (evidenceResult.file) {
+      const uploaded = await uploadExpenseEvidence(supabase, {
+        organizationId,
+        vehicleId: trip.vehicle_id,
+        expenseId: expense.id,
+        evidence: evidenceResult.file,
+      });
+
+      if (!uploaded.ok) {
+        await supabase.from("expenses").delete().eq("id", expense.id);
+        return { success: false, error: uploaded.error };
+      }
+    }
+
+    const linkedTripId = expenseScope === "vehicle" ? null : tripId;
+
+    if (ownerPrepaid) {
+      const advanceResult = await createOwnerPrepaidAdvance(supabase, {
+        organizationId,
+        driverId: trip.driver_id,
+        tripId: linkedTripId,
+        vehicleId: trip.vehicle_id,
+        expenseId: expense.id,
+        amount,
+        userId,
+      });
+      if (!advanceResult.success) {
+        await supabase.from("expenses").delete().eq("id", expense.id);
+        return advanceResult;
+      }
+    }
+
+    await writeAuditLog(supabase, {
+      organizationId,
+      userId,
+      action: "expense_created_by_owner",
+      entity: "expenses",
+      entityId: expense.id,
+      newState: {
+        amount,
+        trip_id: expenseScope === "vehicle" ? null : tripId,
+        expense_scope: expenseScope,
+        status: "approved",
+        owner_prepaid: ownerPrepaid,
+      },
+    });
+
+    revalidateOwnerExpensePaths({
+      tripId,
+      vehicleId: trip.vehicle_id,
+      driverId: trip.driver_id,
+    });
+
+    return { success: true, expenseId: expense.id };
+  } catch (error) {
+    if (error instanceof RoleError) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Error al registrar el gasto." };
+  }
+}
+
 export async function ownerUpdateExpense(
   formData: FormData
 ): Promise<ActionResult> {
